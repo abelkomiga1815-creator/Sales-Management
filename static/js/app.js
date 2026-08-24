@@ -5,6 +5,7 @@ const API_BASE = '/api';
 const API_CUSTOMERS = `${API_BASE}/customers/`;
 const API_TRANSACTIONS = `${API_BASE}/transactions/create/`;
 const API_DAILY_SUMMARY = `${API_BASE}/daily-summary/`;
+const API_ACTIVITY_REPORT = `${API_BASE}/activity-report/`;
 
 // State Management
 const appState = {
@@ -35,6 +36,11 @@ const elements = {
     productRequired: document.getElementById('productRequired'),
     historyModal: document.getElementById('historyModal'),
     historyCloseBtn: document.getElementById('historyCloseBtn'),
+    reportButton: document.getElementById('reportButton'),
+    reportModal: document.getElementById('reportModal'),
+    reportCloseBtn: document.getElementById('reportCloseBtn'),
+    reportSummary: document.getElementById('reportSummary'),
+    reportTransactions: document.getElementById('reportTransactions'),
     customerDetail: document.getElementById('customerDetail'),
     transactionsHistory: document.getElementById('transactionsHistory'),
     toast: document.getElementById('toast'),
@@ -136,6 +142,18 @@ async function fetchCustomerHistory(customerId) {
     } catch (error) {
         console.error('Error fetching customer history:', error);
         showToast('Failed to load transaction history', 'error');
+        return null;
+    }
+}
+
+async function fetchActivityReport() {
+    try {
+        const response = await fetch(API_ACTIVITY_REPORT);
+        if (!response.ok) throw new Error('Failed to fetch activity report');
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching activity report:', error);
+        showToast('Failed to load full report', 'error');
         return null;
     }
 }
@@ -296,6 +314,31 @@ async function showCustomerHistory(customerId) {
     elements.historyModal.classList.add('active');
 }
 
+async function showActivityReport() {
+    const report = await fetchActivityReport();
+    if (!report) return;
+
+    elements.reportSummary.innerHTML = `
+        <div class="report-stat"><span>Transactions</span><strong>${report.total_transactions}</strong></div>
+        <div class="report-stat"><span>Credit given</span><strong>${formatCurrency(report.total_credit_given)}</strong></div>
+        <div class="report-stat"><span>Cash received</span><strong>${formatCurrency(report.total_cash_received)}</strong></div>
+        <div class="report-stat"><span>Net cash flow</span><strong>${formatCurrency(report.net_cash_flow)}</strong></div>
+        <div class="report-stat"><span>Sales</span><strong>${formatCurrency(report.total_sales)}</strong></div>
+    `;
+
+    elements.reportTransactions.innerHTML = report.transactions.length === 0
+        ? '<div class="no-transactions">No activity recorded yet</div>'
+        : report.transactions.map(txn => `
+            <div class="report-transaction">
+                <div><strong>${txn.type}</strong><span>${txn.customer_name || txn.product_name || 'General sale'}</span></div>
+                <strong>${formatCurrency(txn.amount)}</strong>
+                <small>${formatDate(txn.date_created)}</small>
+            </div>
+        `).join('');
+
+    elements.reportModal.classList.add('active');
+}
+
 // ========================================
 // Modal Management
 // ========================================
@@ -323,9 +366,14 @@ function closeHistoryModal() {
     elements.historyModal.classList.remove('active');
 }
 
+function closeReportModal() {
+    elements.reportModal.classList.remove('active');
+}
+
 function closeAllModals() {
     closeTransactionModal();
     closeHistoryModal();
+    closeReportModal();
 }
 
 // ========================================
@@ -347,9 +395,11 @@ updateTransactionFields();
 elements.modalCloseBtn.addEventListener('click', closeTransactionModal);
 elements.modalCancelBtn.addEventListener('click', closeTransactionModal);
 elements.historyCloseBtn.addEventListener('click', closeHistoryModal);
+elements.reportButton.addEventListener('click', showActivityReport);
+elements.reportCloseBtn.addEventListener('click', closeReportModal);
 
 // Close modal on outside click
-[elements.transactionModal, elements.historyModal].forEach(modal => {
+[elements.transactionModal, elements.historyModal, elements.reportModal].forEach(modal => {
     modal.addEventListener('click', (e) => {
         if (e.target === modal) {
             closeAllModals();

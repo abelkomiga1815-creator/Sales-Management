@@ -177,3 +177,26 @@ def daily_summary(request):
     
     serializer = DailySummarySerializer(data)
     return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def activity_report(request):
+    """Return lifetime activity and transactions for the current user's shop."""
+    transactions = Transaction.objects.filter(
+        Q(customer__shop=request.user) | Q(customer__isnull=True, entered_by=request.user)
+    ).select_related('customer', 'entered_by')
+
+    totals = transactions.values('type').annotate(total=models.Sum('amount'))
+    totals_by_type = {item['type']: item['total'] or Decimal('0.00') for item in totals}
+    credit = totals_by_type.get('CREDIT', Decimal('0.00'))
+    debit = totals_by_type.get('DEBIT', Decimal('0.00'))
+
+    return Response({
+        'total_transactions': transactions.count(),
+        'total_credit_given': credit,
+        'total_cash_received': debit,
+        'net_cash_flow': debit - credit,
+        'total_sales': totals_by_type.get('SALE', Decimal('0.00')),
+        'transactions': TransactionSerializer(transactions, many=True).data,
+    })

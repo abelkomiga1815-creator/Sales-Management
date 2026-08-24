@@ -25,7 +25,10 @@
     <main class="container">
         <!-- Daily Summary Section -->
         <section class="summary-card">
-            <h2>Today's Summary</h2>
+            <div class="section-header">
+                <h2>Today's Summary</h2>
+                <button class="btn btn-secondary report-button" id="reportButton" type="button">View full report</button>
+            </div>
             <div class="summary-grid">
                 <div class="summary-item summary-item-credit">
                     <div class="summary-label">Total Credit Given</div>
@@ -132,6 +135,20 @@
             <div class="modal-body">
                 <div class="customer-detail" id="customerDetail"></div>
                 <div class="transactions-history" id="transactionsHistory"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Full Activity Report Modal -->
+    <div class="modal" id="reportModal">
+        <div class="modal-content modal-content-large">
+            <div class="modal-header">
+                <h2>Full Activity Report</h2>
+                <button class="modal-close" id="reportCloseBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="report-summary" id="reportSummary"></div>
+                <div class="report-transactions" id="reportTransactions"></div>
             </div>
         </div>
     </div>

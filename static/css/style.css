@@ -134,6 +134,10 @@ main {
     color: var(--text-dark);
 }
 
+.report-button {
+    white-space: nowrap;
+}
+
 .summary-grid {
     display: grid;
     grid-template-columns: 1fr;
@@ -320,6 +324,45 @@ main {
 .empty-state-icon {
     font-size: 48px;
     margin-bottom: var(--spacing-md);
+}
+
+.report-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-lg);
+}
+
+.report-stat {
+    padding: var(--spacing-md);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.report-stat span,
+.report-transaction small {
+    color: #777;
+    font-size: var(--font-size-sm);
+}
+
+.report-transaction {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px var(--spacing-md);
+    padding: var(--spacing-md) 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.report-transaction div {
+    display: flex;
+    flex-direction: column;
+}
+
+.report-transaction small {
+    grid-column: 1 / -1;
 }
 
 /* ========================================
