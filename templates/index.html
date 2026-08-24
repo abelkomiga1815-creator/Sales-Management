@@ -1,0 +1,152 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Shop Ledger - A PWA for managing customer accounts and transactions">
+    <meta name="theme-color" content="#1B5E20">
+    <link rel="manifest" href="{% static 'manifest.json' %}">
+    <link rel="icon" type="image/png" href="{% static 'images/icon-192x192.png' %}">
+    <link rel="apple-touch-icon" href="{% static 'images/icon-192x192.png' %}">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=2">
+    <title>Shop Ledger</title>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <h1 class="header-title">📖 Shop Ledger</h1>
+            <div class="header-date" id="headerDate"></div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Daily Summary Section -->
+        <section class="summary-card">
+            <h2>Today's Summary</h2>
+            <div class="summary-grid">
+                <div class="summary-item summary-item-credit">
+                    <div class="summary-label">Total Credit Given</div>
+                    <div class="summary-value" id="totalCreditGiven">₹ 0.00</div>
+                </div>
+                <div class="summary-item summary-item-debit">
+                    <div class="summary-label">Total Cash Received</div>
+                    <div class="summary-value" id="totalCashReceived">₹ 0.00</div>
+                </div>
+                <div class="summary-item summary-item-net">
+                    <div class="summary-label">Net Cash Flow</div>
+                    <div class="summary-value" id="netCashFlow">₹ 0.00</div>
+                </div>
+                <div class="summary-item summary-item-sales">
+                    <div class="summary-label">Total Sales</div>
+                    <div class="summary-value" id="totalSales">₹ 0.00</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Customers List Section -->
+        <section class="customers-section">
+            <div class="section-header">
+                <h2>Customers</h2>
+                <span class="customer-count" id="customerCount">0</span>
+            </div>
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Search customer by name or phone..." class="search-input">
+            </div>
+            <div class="customers-list" id="customersList">
+                <div class="loading">Loading customers...</div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Floating Action Button -->
+    <button class="fab" id="fabButton" title="Add new transaction">
+        <span class="fab-icon">+</span>
+    </button>
+
+    <!-- Transaction Modal -->
+    <div class="modal" id="transactionModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add Transaction</h2>
+                <button class="modal-close" id="modalCloseBtn">&times;</button>
+            </div>
+            <form id="transactionForm" class="modal-form">
+                <div class="form-group" id="customerFieldGroup">
+                    <label for="customerSelect">Customer <span class="required">*</span></label>
+                    <select id="customerSelect" name="customer" required class="form-input">
+                        <option value="">Select a customer...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="productNameInput">Product Sold <span class="required" id="productRequired">*</span></label>
+                    <input type="text" id="productNameInput" name="product_name" required placeholder="Enter product name..." class="form-input">
+                </div>
+
+                <div class="form-group">
+                    <label>Transaction Type <span class="required">*</span></label>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="type" value="CREDIT" required>
+                            <span class="radio-text">Credit (Given)</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="type" value="DEBIT" required>
+                            <span class="radio-text">Debit (Received)</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="type" value="SALE" required checked>
+                            <span class="radio-text">Sale</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="amountInput">Amount <span class="required">*</span></label>
+                    <input type="number" id="amountInput" name="amount" step="0.01" min="0" required placeholder="0.00" class="form-input">
+                </div>
+
+                <div class="form-group">
+                    <label for="descriptionInput">Description</label>
+                    <textarea id="descriptionInput" name="description" placeholder="Enter transaction description..." class="form-input form-textarea" rows="3"></textarea>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="modalCancelBtn">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Transaction</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Customer History Modal -->
+    <div class="modal" id="historyModal">
+        <div class="modal-content modal-content-large">
+            <div class="modal-header">
+                <h2>Transaction History</h2>
+                <button class="modal-close" id="historyCloseBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="customer-detail" id="customerDetail"></div>
+                <div class="transactions-history" id="transactionsHistory"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <script src="{% static 'js/app.js' %}?v=3"></script>
+    <script>
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('{% static "sw.js" %}')
+                .then(registration => console.log('Service Worker registered'))
+                .catch(error => console.log('Service Worker registration failed:', error));
+        }
+    </script>
+</body>
+</html>
