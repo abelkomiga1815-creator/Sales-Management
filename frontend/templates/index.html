@@ -9,17 +9,18 @@
     <link rel="manifest" href="{% static 'manifest.json' %}">
     <link rel="icon" type="image/png" href="{% static 'images/icon-192x192.png' %}">
     <link rel="apple-touch-icon" href="{% static 'images/icon-192x192.png' %}">
-    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=2">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=3">
     <title>Shop Ledger</title>
 </head>
 <body>
     <!-- Header -->
     <header class="header">
         <div class="header-content">
-            <h1 class="header-title">📖 Shop Ledger</h1>
+            <h1 class="header-title">Shop Ledger</h1>
             <div class="header-account">
                 <span class="header-business" id="businessName"></span>
                 <button class="header-logout" id="installButton" type="button" hidden>Install app</button>
+                <button class="header-logout" id="settingsButton" type="button">Settings</button>
                 <button class="header-logout" id="logoutButton" type="button">Log out</button>
             </div>
         </div>
@@ -74,7 +75,7 @@
         <!-- Debts List Section -->
         <section class="debts-section">
             <div class="section-header">
-                <h2>📋 Recorded Debts</h2>
+                <h2>Recorded Debts</h2>
                 <span class="debts-count" id="debtsCount">0</span>
             </div>
             <div class="debts-list" id="debtsList">
@@ -121,13 +122,13 @@
                 <div class="form-group">
                     <label>Transaction Type <span class="required">*</span></label>
                     <div class="radio-group">
-                        <label class="radio-label">
+                        <label class="radio-label" id="creditRadioLabel">
                             <input type="radio" name="type" value="CREDIT" required>
                             <span class="radio-text">Credit (Given)</span>
                         </label>
                         <label class="radio-label">
                             <input type="radio" name="type" value="DEBIT" required>
-                            <span class="radio-text">Debit (Received)</span>
+                            <span class="radio-text">Debit Payed</span>
                         </label>
                         <label class="radio-label">
                             <input type="radio" name="type" value="SALE" required>
@@ -190,7 +191,7 @@
     <div class="modal" id="debtsModal">
         <div class="modal-content modal-content-large">
             <div class="modal-header">
-                <h2>📋 Manage Debts</h2>
+                <h2>Manage Debts</h2>
                 <button class="modal-close" id="debtsCloseBtn">&times;</button>
             </div>
             <div class="modal-body">
@@ -199,10 +200,34 @@
         </div>
     </div>
 
+    <!-- Settings Modal -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button class="modal-close" id="settingsCloseBtn">&times;</button>
+            </div>
+            <div class="modal-form">
+                <div class="form-group">
+                    <label for="languageSelect">Language</label>
+                    <select id="languageSelect" class="form-input">
+                        <option value="en">English</option>
+                        <option value="sw">Kiswahili</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="settingsCancelBtn">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="settingsSaveBtn">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div class="toast" id="toast"></div>
 
-    <script src="{% static 'js/app.js' %}?v=4"></script>
+    <script src="{% static 'js/i18n.js' %}?v=1"></script>
+    <script src="{% static 'js/app.js' %}?v=5"></script>
     <script>
         let installPrompt;
         const installButton = document.getElementById('installButton');

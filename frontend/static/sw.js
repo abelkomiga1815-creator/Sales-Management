@@ -129,13 +129,28 @@ self.addEventListener('fetch', (event) => {
     );
 });
 
+// Handle messages from the main thread
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'CLEAR_CACHE') {
+        console.log('[Service Worker] Clearing all caches...');
+        event.waitUntil(
+            caches.keys().then((cacheNames) => {
+                return Promise.all(
+                    cacheNames.map((cacheName) => caches.delete(cacheName))
+                );
+            }).then(() => {
+                console.log('[Service Worker] All caches cleared');
+            })
+        );
+    }
+});
+
 // Handle background sync (optional - for future features)
 self.addEventListener('sync', (event) => {
     console.log('[Service Worker] Background sync:', event.tag);
     
     if (event.tag === 'sync-transactions') {
         event.waitUntil(
-            // Sync transactions when connection is restored
             Promise.resolve()
         );
     }

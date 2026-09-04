@@ -1078,3 +1078,216 @@ main {
         width: 100%;
     }
 }
+
+/* ========================================
+   Password Strength Indicator
+   ======================================== */
+
+.password-strength-container {
+    margin-top: var(--spacing-sm);
+}
+
+.password-strength-bar {
+    height: 6px;
+    background-color: var(--border-color);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: var(--spacing-xs);
+}
+
+.password-strength-fill {
+    height: 100%;
+    width: 0;
+    border-radius: 3px;
+    transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.password-strength-label {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    margin-bottom: var(--spacing-xs);
+    display: inline-block;
+}
+
+.password-checklist {
+    list-style: none;
+    padding: 0;
+    margin: var(--spacing-sm) 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.password-checklist li {
+    font-size: var(--font-size-sm);
+    color: #999;
+    padding-left: 20px;
+    position: relative;
+    transition: color 0.2s ease;
+}
+
+.password-checklist li::before {
+    content: '✗';
+    position: absolute;
+    left: 0;
+    color: var(--danger-color);
+    font-weight: bold;
+}
+
+.password-checklist li.passed {
+    color: var(--success-color);
+}
+
+.password-checklist li.passed::before {
+    content: '✓';
+    color: var(--success-color);
+}
+
+/* ========================================
+   Auth Links
+   ======================================== */
+
+.auth-links {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-md);
+}
+
+.auth-links a {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-size: var(--font-size-base);
+}
+
+.auth-links a:hover {
+    text-decoration: underline;
+}
+
+.auth-link-secondary {
+    color: #666 !important;
+    font-size: var(--font-size-sm) !important;
+}
+
+/* ========================================
+   Debt Status Badges
+   ======================================== */
+
+.debt-status {
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-top: var(--spacing-xs);
+}
+
+.debt-status-unpaid, .debt-status.UNPAID {
+    background-color: rgba(211, 47, 47, 0.1);
+    color: var(--danger-color);
+}
+
+.debt-status-partially_paid, .debt-status.PARTIALLY_PAID {
+    background-color: rgba(255, 165, 0, 0.1);
+    color: var(--warning-color);
+}
+
+.debt-status-paid, .debt-status.PAID {
+    background-color: rgba(56, 142, 60, 0.1);
+    color: var(--success-color);
+}
+
+.debt-status-badge {
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.debt-status-badge.status-unpaid {
+    background-color: rgba(211, 47, 47, 0.1);
+    color: var(--danger-color);
+}
+
+.debt-status-badge.status-partial {
+    background-color: rgba(255, 165, 0, 0.1);
+    color: var(--warning-color);
+}
+
+.debt-status-badge.status-paid {
+    background-color: rgba(56, 142, 60, 0.1);
+    color: var(--success-color);
+}
+
+/* ========================================
+   Payment History
+   ======================================== */
+
+.payment-history {
+    margin-top: var(--spacing-md);
+}
+
+.payment-history h4 {
+    margin-bottom: var(--spacing-md);
+    font-size: var(--font-size-lg);
+    color: var(--text-dark);
+}
+
+.payment-item {
+    background-color: var(--bg-dark);
+    padding: var(--spacing-md);
+    border-radius: var(--border-radius);
+    border-left: 4px solid var(--debit-color);
+    margin-bottom: var(--spacing-sm);
+}
+
+.payment-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.payment-amount {
+    font-weight: 700;
+    font-size: var(--font-size-lg);
+    color: var(--debit-color);
+}
+
+.payment-date {
+    font-size: var(--font-size-sm);
+    color: #999;
+}
+
+.payment-desc {
+    font-size: var(--font-size-sm);
+    color: #666;
+    margin-top: var(--spacing-xs);
+    font-style: italic;
+}
+
+.no-payments {
+    text-align: center;
+    padding: var(--spacing-md);
+    color: #999;
+    font-style: italic;
+}
+
+.payment-form-container {
+    background-color: var(--bg-dark);
+    padding: var(--spacing-md);
+    border-radius: var(--border-radius);
+    margin-top: var(--spacing-md);
+    border: 1px solid var(--border-color);
+}
+
+.payment-form-container h4 {
+    margin-bottom: var(--spacing-md);
+    font-size: var(--font-size-lg);
+    color: var(--text-dark);
+}
+
+/* ========================================
+   Settings Modal
+   ======================================== */

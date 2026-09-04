@@ -1,4 +1,4 @@
-closed// Shop Ledger PWA - Main Application Script
+// Shop Ledger PWA - Main Application Script
 
 // API Configuration
 const API_BASE = '/api';
@@ -7,6 +7,8 @@ const API_TRANSACTIONS = `${API_BASE}/transactions/create/`;
 const API_DAILY_SUMMARY = `${API_BASE}/daily-summary/`;
 const API_ACTIVITY_REPORT = `${API_BASE}/activity-report/`;
 const API_DEBTS = `${API_BASE}/transactions/?type=DEBT`;
+const API_DEBT_PAY = `${API_BASE}/debts/pay/`;
+const API_PREFERENCES = `${API_BASE}/preferences/`;
 
 // State Management
 const appState = {
@@ -14,6 +16,7 @@ const appState = {
     filteredCustomers: [],
     currentCustomer: null,
     isLoading: false,
+    currentLanguage: 'en',
 };
 
 // DOM Elements
@@ -21,6 +24,7 @@ const elements = {
     headerDate: document.getElementById('headerDate'),
     businessName: document.getElementById('businessName'),
     logoutButton: document.getElementById('logoutButton'),
+    settingsButton: document.getElementById('settingsButton'),
     totalCreditGiven: document.getElementById('totalCreditGiven'),
     totalCashReceived: document.getElementById('totalCashReceived'),
     netCashFlow: document.getElementById('netCashFlow'),
@@ -59,6 +63,11 @@ const elements = {
     debtsCloseBtn: document.getElementById('debtsCloseBtn'),
     debtsManagement: document.getElementById('debtsManagement'),
     toast: document.getElementById('toast'),
+    settingsModal: document.getElementById('settingsModal'),
+    settingsCloseBtn: document.getElementById('settingsCloseBtn'),
+    settingsCancelBtn: document.getElementById('settingsCancelBtn'),
+    settingsSaveBtn: document.getElementById('settingsSaveBtn'),
+    languageSelect: document.getElementById('languageSelect'),
 };
 
 // ========================================
@@ -70,7 +79,7 @@ function formatCurrency(amount) {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     }).format(parseFloat(amount));
-        return `TSh ${formattedAmount}`;
+    return `TSh ${formattedAmount}`;
 }
 
 function formatDate(dateString) {
@@ -97,7 +106,6 @@ function getTodayDate() {
 function showToast(message, type = 'info', duration = 3000) {
     elements.toast.textContent = message;
     elements.toast.className = `toast show ${type}`;
-    
     setTimeout(() => {
         elements.toast.classList.remove('show');
     }, duration);
@@ -117,6 +125,79 @@ function getCSRFToken() {
         }
     }
     return cookieValue;
+}
+
+// ========================================
+// Language / i18n
+// ========================================
+
+function applyTranslations() {
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        el.textContent = t(key);
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        el.placeholder = t(key);
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        const key = el.getAttribute('data-i18n-title');
+        el.title = t(key);
+    });
+
+    // Update specific elements
+    const creditLabel = document.querySelector('#creditRadioLabel .radio-text');
+    if (creditLabel) creditLabel.textContent = t('credit_given');
+    const debitLabel = document.querySelector('input[value="DEBIT"]');
+    if (debitLabel) {
+        const labelSpan = debitLabel.closest('.radio-label').querySelector('.radio-text');
+        if (labelSpan) labelSpan.textContent = t('debit_payed');
+    }
+    const debtLabel = document.querySelector('input[value="DEBT"]');
+    if (debtLabel) {
+        const labelSpan = debtLabel.closest('.radio-label').querySelector('.radio-text');
+        if (labelSpan) labelSpan.textContent = t('debt');
+    }
+    const saleLabel = document.querySelector('input[value="SALE"]');
+    if (saleLabel) {
+        const labelSpan = saleLabel.closest('.radio-label').querySelector('.radio-text');
+        if (labelSpan) labelSpan.textContent = t('sale');
+    }
+}
+
+async function loadLanguagePreference() {
+    try {
+        const response = await fetch(API_PREFERENCES, { credentials: 'include' });
+        if (response.ok) {
+            const data = await response.json();
+            setLanguage(data.language || 'en');
+        }
+    } catch (_) {}
+    appState.currentLanguage = getStoredLanguage();
+    setLanguage(appState.currentLanguage);
+    applyTranslations();
+}
+
+async function saveLanguagePreference(lang) {
+    try {
+        const response = await fetch(API_PREFERENCES, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken(),
+            },
+            body: JSON.stringify({language: lang}),
+        });
+        if (response.ok) {
+            setLanguage(lang);
+            appState.currentLanguage = lang;
+            applyTranslations();
+            showToast(t('settings_saved'), 'success');
+        }
+    } catch (_) {
+        showToast('Failed to save settings', 'error');
+    }
 }
 
 // ========================================
@@ -154,11 +235,22 @@ async function loadCurrentUser() {
     if (!response.ok) throw new Error('Unable to load account');
     const user = await response.json();
     elements.businessName.textContent = `${user.business_name} (${user.username})`;
+    if (user.language) {
+        setLanguage(user.language);
+        appState.currentLanguage = user.language;
+        applyTranslations();
+    }
 }
 
 async function logoutUser() {
+    try {
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_CACHE' });
+        }
+    } catch (_) {}
     await fetch(`${API_BASE}/auth/logout/`, {
         method: 'POST',
+        credentials: 'include',
         headers: {'X-CSRFToken': getCSRFToken()},
     });
     window.location.href = '/login/';
@@ -176,8 +268,7 @@ async function fetchDailySummary() {
             return null;
         }
         if (!response.ok) throw new Error('Failed to fetch daily summary');
-        const data = await response.json();
-        return data;
+        return await response.json();
     } catch (error) {
         console.error('Error fetching daily summary:', error);
         showToast('Failed to load summary', 'error');
@@ -193,8 +284,7 @@ async function fetchCustomerHistory(customerId) {
             return null;
         }
         if (!response.ok) throw new Error('Failed to fetch history');
-        const data = await response.json();
-        return data;
+        return await response.json();
     } catch (error) {
         console.error('Error fetching customer history:', error);
         showToast('Failed to load transaction history', 'error');
@@ -237,6 +327,44 @@ async function fetchDebts() {
     }
 }
 
+async function fetchDebtPayments(debtId) {
+    try {
+        const response = await fetch(`${API_BASE}/debts/${debtId}/payments/`, { credentials: 'include' });
+        if (response.status === 401 || response.status === 403) {
+            window.location.href = '/login/';
+            return null;
+        }
+        if (!response.ok) throw new Error('Failed to fetch payments');
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching debt payments:', error);
+        return null;
+    }
+}
+
+async function createDebtPayment(debtId, amount, description) {
+    try {
+        const response = await fetch(API_DEBT_PAY, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken(),
+            },
+            body: JSON.stringify({debt_id: debtId, amount: parseFloat(amount), description: description || ''}),
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || err.amount || 'Payment failed');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Error creating payment:', error);
+        showToast(`Payment failed: ${error.message}`, 'error');
+        return null;
+    }
+}
+
 async function createTransaction(formData) {
     try {
         const response = await fetch(API_TRANSACTIONS, {
@@ -260,9 +388,7 @@ async function createTransaction(formData) {
             const error = await response.json();
             throw new Error(JSON.stringify(error));
         }
-
-        const data = await response.json();
-        return data;
+        return await response.json();
     } catch (error) {
         console.error('Error creating transaction:', error);
         showToast(`Failed to create transaction: ${error.message}`, 'error');
@@ -281,10 +407,8 @@ async function createCustomer(name, phone) {
             },
             body: JSON.stringify({ name, phone }),
         });
-
         if (!response.ok) throw new Error('Failed to create customer');
-        const data = await response.json();
-        return data;
+        return await response.json();
     } catch (error) {
         console.error('Error creating customer:', error);
         showToast('Failed to create customer', 'error');
@@ -293,19 +417,15 @@ async function createCustomer(name, phone) {
 }
 
 async function deleteTransaction(transactionId) {
-    if (!confirm('Delete this transaction? This cannot be undone.')) return false;
-
+    if (!confirm(t('delete_confirm'))) return false;
     try {
         const response = await fetch(`${API_BASE}/transactions/${transactionId}/`, {
             method: 'DELETE',
             credentials: 'include',
-            headers: {
-                'X-CSRFToken': getCSRFToken(),
-            },
+            headers: { 'X-CSRFToken': getCSRFToken() },
         });
-
         if (!response.ok) throw new Error('Failed to delete transaction');
-        showToast('Transaction deleted', 'success');
+        showToast(t('transaction_deleted'), 'success');
         return true;
     } catch (error) {
         console.error('Error deleting transaction:', error);
@@ -320,7 +440,7 @@ async function deleteTransaction(transactionId) {
 
 function renderCustomers() {
     if (appState.filteredCustomers.length === 0) {
-        elements.customersList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><p>No customers found</p></div>';
+        elements.customersList.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📭</div><p>${t('no_customers_found')}</p></div>`;
         elements.customerCount.textContent = '0';
         return;
     }
@@ -346,7 +466,7 @@ async function renderDebts() {
     const debts = await fetchDebts();
     
     if (debts.length === 0) {
-        elements.debtsList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">✅</div><p>No debts recorded</p></div>';
+        elements.debtsList.innerHTML = `<div class="empty-state"><div class="empty-state-icon">✅</div><p>${t('no_debts')}</p></div>`;
         elements.debtsCount.textContent = '0';
         return;
     }
@@ -357,8 +477,9 @@ async function renderDebts() {
                 <div class="debt-borrower">${debt.borrower_name || 'Unknown'}</div>
                 <div class="debt-amount">${formatCurrency(debt.amount)}</div>
             </div>
-            <div class="debt-product">Product: ${debt.product_name || 'N/A'}</div>
+            <div class="debt-product">${t('product')}: ${debt.product_name || 'N/A'}</div>
             <div class="debt-date">${formatDate(debt.date_created)}</div>
+            ${debt.payment_status ? `<div class="debt-status debt-status-${debt.payment_status.toLowerCase()}">${debt.payment_status === 'PAID' ? t('status_paid') : debt.payment_status === 'PARTIALLY_PAID' ? t('status_partial') : t('status_unpaid')}</div>` : ''}
             ${debt.description ? `<div class="debt-description">${debt.description}</div>` : ''}
         </div>
     `).join('');
@@ -377,7 +498,7 @@ async function updateDailySummary() {
 }
 
 function populateCustomerSelect() {
-    const html = '<option value="">Select a customer...</option>' +
+    const html = `<option value="">${t('select_customer')}</option>` +
         appState.customers.map(customer =>
             `<option value="${customer.id}">${customer.name}${customer.phone ? ` (${customer.phone})` : ''}</option>`
         ).join('');
@@ -405,44 +526,41 @@ async function showCustomerHistory(customerId) {
     const transactions = data.transactions || [];
     appState.currentCustomer = customer;
 
-    // Render customer details
     elements.customerDetail.innerHTML = `
         <div class="detail-row">
-            <span class="detail-label">Name:</span>
+            <span class="detail-label">${t('name')}:</span>
             <span class="detail-value">${customer.name}</span>
         </div>
         <div class="detail-row">
-            <span class="detail-label">Phone:</span>
+            <span class="detail-label">${t('phone')}:</span>
             <span class="detail-value">${customer.phone || 'N/A'}</span>
         </div>
         <div class="detail-row">
-            <span class="detail-label">Current Balance:</span>
+            <span class="detail-label">${t('current_balance')}:</span>
             <span class="detail-value" style="font-size: 18px; font-weight: 700;">
                 ${formatCurrency(customer.total_balance)}
             </span>
         </div>
     `;
 
-    // Render transactions
     if (transactions.length === 0) {
-        elements.transactionsHistory.innerHTML = '<div class="no-transactions">No transactions yet</div>';
+        elements.transactionsHistory.innerHTML = `<div class="no-transactions">${t('no_transactions')}</div>`;
     } else {
         elements.transactionsHistory.innerHTML = transactions.map(txn => `
             <div class="transaction-item ${txn.type}">
                 <div class="transaction-header">
-                    <span class="transaction-type ${txn.type}">${txn.type}</span>
+                    <span class="transaction-type ${txn.type}">${txn.type === 'CREDIT' ? t('credit_given') : txn.type === 'DEBIT' ? t('debit_payed') : txn.type === 'SALE' ? t('sale') : t('debt')}</span>
                     <span class="transaction-amount">${formatCurrency(txn.amount)}</span>
                 </div>
                 ${txn.description ? `<div class="transaction-description">${txn.description}</div>` : ''}
                 <div class="transaction-footer">
                     <div class="transaction-date">${formatDate(txn.date_created)}</div>
-                    <button type="button" class="delete-transaction" data-transaction-id="${txn.id}" title="Delete transaction" aria-label="Delete transaction">Delete</button>
+                    <button type="button" class="delete-transaction" data-transaction-id="${txn.id}" title="${t('delete_transaction')}" aria-label="${t('delete_transaction')}">${t('delete_transaction')}</button>
                 </div>
             </div>
         `).join('');
     }
 
-    // Show modal
     elements.historyModal.classList.add('active');
 }
 
@@ -451,22 +569,22 @@ async function showActivityReport() {
     if (!report) return;
 
     elements.reportSummary.innerHTML = `
-        <div class="report-stat"><span>Transactions</span><strong>${report.total_transactions}</strong></div>
-        <div class="report-stat"><span>Credit given</span><strong>${formatCurrency(report.total_credit_given)}</strong></div>
-        <div class="report-stat"><span>Cash received</span><strong>${formatCurrency(report.total_cash_received)}</strong></div>
-        <div class="report-stat"><span>Net cash flow</span><strong>${formatCurrency(report.net_cash_flow)}</strong></div>
-        <div class="report-stat"><span>Sales</span><strong>${formatCurrency(report.total_sales)}</strong></div>
+        <div class="report-stat"><span>${t('transactions_label')}</span><strong>${report.total_transactions}</strong></div>
+        <div class="report-stat"><span>${t('credit_given_label')}</span><strong>${formatCurrency(report.total_credit_given)}</strong></div>
+        <div class="report-stat"><span>${t('cash_received_label')}</span><strong>${formatCurrency(report.total_cash_received)}</strong></div>
+        <div class="report-stat"><span>${t('net_cash_flow_label')}</span><strong>${formatCurrency(report.net_cash_flow)}</strong></div>
+        <div class="report-stat"><span>${t('sales_label')}</span><strong>${formatCurrency(report.total_sales)}</strong></div>
     `;
 
     elements.reportTransactions.innerHTML = report.transactions.length === 0
-        ? '<div class="no-transactions">No activity recorded yet</div>'
+        ? `<div class="no-transactions">${t('no_activity')}</div>`
         : report.transactions.map(txn => `
             <div class="report-transaction">
-                <div><strong>${txn.type}</strong><span>${txn.customer_name || txn.product_name || 'General sale'}</span></div>
-                <div class="report-description">${txn.product_name ? `Product: ${txn.product_name}` : ''}${txn.description ? `Description: ${txn.description}` : ''}</div>
+                <div><strong>${txn.type === 'CREDIT' ? t('credit_given') : txn.type === 'DEBIT' ? t('debit_payed') : txn.type === 'SALE' ? t('sale') : t('debt')}</strong><span>${txn.customer_name || txn.product_name || 'General sale'}</span></div>
+                <div class="report-description">${txn.product_name ? `${t('product')}: ${txn.product_name}` : ''}${txn.description ? `Description: ${txn.description}` : ''}</div>
                 <strong>${formatCurrency(txn.amount)}</strong>
                 <small>${formatDate(txn.date_created)}</small>
-                <button type="button" class="delete-transaction" data-transaction-id="${txn.id}" title="Delete transaction" aria-label="Delete transaction">Delete</button>
+                <button type="button" class="delete-transaction" data-transaction-id="${txn.id}" title="${t('delete_transaction')}" aria-label="${t('delete_transaction')}">${t('delete_transaction')}</button>
             </div>
         `).join('');
 
@@ -474,73 +592,143 @@ async function showActivityReport() {
 }
 
 async function showDebtDetail(debtId) {
-    const debts = await fetchDebts();
-    const debt = debts.find(d => d.id === debtId);
-    
-    if (!debt) {
-        showToast('Debt not found', 'error');
+    const paymentData = await fetchDebtPayments(debtId);
+    if (!paymentData) {
+        showToast(t('failed_create_transaction'), 'error');
         return;
+    }
+
+    const debt = paymentData.debt;
+    const payments = paymentData.payments || [];
+    const totalPaid = paymentData.total_paid;
+    const remaining = paymentData.remaining_balance;
+    const payStatus = paymentData.status;
+    const statusLabel = payStatus === 'PAID' ? t('status_paid') : payStatus === 'PARTIALLY_PAID' ? t('status_partial') : t('status_unpaid');
+    const statusClass = payStatus === 'PAID' ? 'status-paid' : payStatus === 'PARTIALLY_PAID' ? 'status-partial' : 'status-unpaid';
+
+    let paymentsHtml = '';
+    if (payments.length > 0) {
+        paymentsHtml = `
+            <div class="payment-history">
+                <h4>${t('payment_history')}</h4>
+                ${payments.map(p => `
+                    <div class="payment-item">
+                        <div class="payment-info">
+                            <span class="payment-amount">${formatCurrency(p.amount)}</span>
+                            <span class="payment-date">${formatDate(p.date_created)}</span>
+                        </div>
+                        ${p.description ? `<div class="payment-desc">${p.description}</div>` : ''}
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    } else {
+        paymentsHtml = `<div class="no-payments">${t('no_payments')}</div>`;
     }
 
     elements.debtsManagement.innerHTML = `
         <div class="debt-detail-container">
             <div class="debt-detail">
-                <h3>Debt Information</h3>
+                <h3>${t('debt_information')}</h3>
                 <div class="detail-row">
-                    <span class="detail-label">Borrower Name:</span>
+                    <span class="detail-label">${t('borrower_name')}:</span>
                     <span class="detail-value">${debt.borrower_name}</span>
                 </div>
                 <div class="detail-row">
-                    <span class="detail-label">Product Borrowed:</span>
+                    <span class="detail-label">${t('product_borrowed')}:</span>
                     <span class="detail-value">${debt.product_name}</span>
                 </div>
                 <div class="detail-row">
-                    <span class="detail-label">Amount:</span>
-                    <span class="detail-value" style="font-size: 18px; font-weight: 700;">
-                        ${formatCurrency(debt.amount)}
-                    </span>
+                    <span class="detail-label">${t('total_amount')}:</span>
+                    <span class="detail-value" style="font-size: 18px; font-weight: 700;">${formatCurrency(debt.amount)}</span>
                 </div>
                 <div class="detail-row">
-                    <span class="detail-label">Date Recorded:</span>
+                    <span class="detail-label">${t('total_paid')}:</span>
+                    <span class="detail-value" style="color: var(--debit-color); font-weight: 700;">${formatCurrency(totalPaid)}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">${t('remaining_balance')}:</span>
+                    <span class="detail-value" style="color: var(--warning-color); font-weight: 700;">${formatCurrency(remaining)}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">${t('payment_status')}:</span>
+                    <span class="debt-status-badge ${statusClass}">${statusLabel}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">${t('date_recorded')}:</span>
                     <span class="detail-value">${formatDate(debt.date_created)}</span>
                 </div>
                 ${debt.description ? `
                 <div class="detail-row">
-                    <span class="detail-label">Description:</span>
+                    <span class="detail-label">${t('description')}:</span>
                     <span class="detail-value">${debt.description}</span>
                 </div>
                 ` : ''}
             </div>
+
+            ${payStatus !== 'PAID' ? `
+            <div class="payment-form-container">
+                <h4>${t('make_payment')}</h4>
+                <form id="paymentForm" class="modal-form">
+                    <div class="form-group">
+                        <label for="paymentAmountInput">${t('payment_amount')}</label>
+                        <input type="number" id="paymentAmountInput" class="form-input" step="0.01" min="0.01" max="${remaining}" required placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label for="paymentDescInput">${t('payment_description')}</label>
+                        <input type="text" id="paymentDescInput" class="form-input" placeholder="${t('payment_description')}">
+                    </div>
+                    <div class="modal-actions">
+                        <button type="submit" class="btn btn-primary">${t('record_payment')}</button>
+                    </div>
+                </form>
+            </div>
+            ` : ''}
+
+            ${paymentsHtml}
+
             <div class="debt-actions">
-                <button type="button" class="btn btn-primary" onclick="markDebtAsRepaid(${debt.id})">Mark as Repaid</button>
-                <button type="button" class="btn btn-secondary" onclick="deleteDebtRecord(${debt.id})">Delete Record</button>
+                ${payStatus !== 'PAID' ? `<button type="button" class="btn btn-primary" onclick="markDebtAsRepaid(${debt.id})">${t('mark_as_repaid')}</button>` : ''}
+                <button type="button" class="btn btn-secondary" onclick="deleteDebtRecord(${debt.id})">${t('delete_record')}</button>
             </div>
         </div>
     `;
+
+    // Attach payment form handler
+    const paymentForm = document.getElementById('paymentForm');
+    if (paymentForm) {
+        paymentForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const amount = document.getElementById('paymentAmountInput').value;
+            const desc = document.getElementById('paymentDescInput').value;
+            if (!amount || parseFloat(amount) <= 0) {
+                showToast('Please enter a valid amount', 'error');
+                return;
+            }
+            const result = await createDebtPayment(debt.id, amount, desc);
+            if (result) {
+                showToast(t('payment_recorded'), 'success');
+                await showDebtDetail(debtId);
+                await renderDebts();
+                await updateDailySummary();
+            }
+        });
+    }
 
     elements.debtsModal.classList.add('active');
 }
 
 async function markDebtAsRepaid(debtId) {
-    if (!confirm('Mark this debt as repaid?')) return;
+    if (!confirm(t('mark_repaid_confirm'))) return;
     
     try {
-        // Create a DEBIT transaction to offset the DEBT
-        const debt = (await fetchDebts()).find(d => d.id === debtId);
-        if (!debt) return;
-
-        // Delete the original debt
         await fetch(`${API_BASE}/transactions/${debtId}/`, {
             method: 'DELETE',
-            headers: {
-                'X-CSRFToken': getCSRFToken(),
-            },
+            credentials: 'include',
+            headers: { 'X-CSRFToken': getCSRFToken() },
         });
-
-        showToast('Debt marked as repaid!', 'success');
+        showToast(t('debt_marked_repaid'), 'success');
         elements.debtsModal.classList.remove('active');
-        
-        // Refresh debts
         await renderDebts();
     } catch (error) {
         console.error('Error marking debt as repaid:', error);
@@ -549,20 +737,16 @@ async function markDebtAsRepaid(debtId) {
 }
 
 async function deleteDebtRecord(debtId) {
-    if (!confirm('Delete this debt record? This cannot be undone.')) return;
+    if (!confirm(t('delete_record_confirm'))) return;
     
     try {
         await fetch(`${API_BASE}/transactions/${debtId}/`, {
             method: 'DELETE',
-            headers: {
-                'X-CSRFToken': getCSRFToken(),
-            },
+            credentials: 'include',
+            headers: { 'X-CSRFToken': getCSRFToken() },
         });
-
-        showToast('Debt record deleted', 'success');
+        showToast(t('debt_record_deleted'), 'success');
         elements.debtsModal.classList.remove('active');
-        
-        // Refresh debts
         await renderDebts();
     } catch (error) {
         console.error('Error deleting debt:', error);
@@ -585,7 +769,8 @@ function updateTransactionFields() {
     const isSale = type === 'SALE';
     const isDebt = type === 'DEBT';
     const isDebit = type === 'DEBIT';
-    const requiresCustomer = !isSale && !isDebt && !isDebit;
+    const isCredit = type === 'CREDIT';
+    const requiresCustomer = isCredit;
 
     elements.customerFieldGroup.hidden = isSale || isDebt || isDebit;
     elements.customerSelect.required = requiresCustomer;
@@ -601,13 +786,13 @@ function updateTransactionFields() {
     elements.payerRequired.hidden = !isDebit;
 
     if (isDebt) {
-        elements.productNameInput.placeholder = 'Enter product borrowed...';
+        elements.productNameInput.placeholder = t('enter_product_borrowed');
     } else if (isSale) {
-        elements.productNameInput.placeholder = 'Enter product sold...';
+        elements.productNameInput.placeholder = t('enter_product_sold');
     } else if (isDebit) {
-        elements.productNameInput.placeholder = 'Enter product/service name...';
+        elements.productNameInput.placeholder = t('enter_product_service');
     } else {
-        elements.productNameInput.placeholder = 'Enter product name...';
+        elements.productNameInput.placeholder = t('enter_product_name');
     }
 }
 
@@ -627,11 +812,16 @@ function closeDebtsModal() {
     elements.debtsModal.classList.remove('active');
 }
 
+function closeSettingsModal() {
+    elements.settingsModal.classList.remove('active');
+}
+
 function closeAllModals() {
     closeTransactionModal();
     closeHistoryModal();
     closeReportModal();
     closeDebtsModal();
+    closeSettingsModal();
 }
 
 // ========================================
@@ -645,6 +835,23 @@ updateHeaderDate();
 elements.fabButton.addEventListener('click', openTransactionModal);
 elements.logoutButton.addEventListener('click', logoutUser);
 elements.backupButton.addEventListener('click', startGoogleBackup);
+
+// Settings
+elements.settingsButton.addEventListener('click', () => {
+    elements.languageSelect.value = appState.currentLanguage;
+    elements.settingsModal.classList.add('active');
+});
+elements.settingsCloseBtn.addEventListener('click', closeSettingsModal);
+elements.settingsCancelBtn.addEventListener('click', closeSettingsModal);
+elements.settingsSaveBtn.addEventListener('click', () => {
+    const lang = elements.languageSelect.value;
+    saveLanguagePreference(lang);
+    closeSettingsModal();
+});
+
+// Hide Credit (Given) radio button - feature disabled but kept in backend
+const creditRadioLabel = document.getElementById('creditRadioLabel');
+if (creditRadioLabel) creditRadioLabel.style.display = 'none';
 
 document.querySelectorAll('input[name="type"]').forEach(input => {
     input.addEventListener('change', updateTransactionFields);
@@ -662,7 +869,6 @@ elements.debtsCloseBtn.addEventListener('click', closeDebtsModal);
 elements.transactionsHistory.addEventListener('click', async (event) => {
     const button = event.target.closest('.delete-transaction');
     if (!button) return;
-
     event.stopPropagation();
     if (await deleteTransaction(button.dataset.transactionId)) {
         await showCustomerHistory(appState.currentCustomer.id);
@@ -675,7 +881,6 @@ elements.transactionsHistory.addEventListener('click', async (event) => {
 elements.reportTransactions.addEventListener('click', async (event) => {
     const button = event.target.closest('.delete-transaction');
     if (!button) return;
-
     event.stopPropagation();
     if (await deleteTransaction(button.dataset.transactionId)) {
         await showActivityReport();
@@ -686,7 +891,7 @@ elements.reportTransactions.addEventListener('click', async (event) => {
 });
 
 // Close modal on outside click
-[elements.transactionModal, elements.historyModal, elements.reportModal, elements.debtsModal].forEach(modal => {
+[elements.transactionModal, elements.historyModal, elements.reportModal, elements.debtsModal, elements.settingsModal].forEach(modal => {
     modal.addEventListener('click', (e) => {
         if (e.target === modal) {
             closeAllModals();
@@ -706,40 +911,39 @@ elements.transactionForm.addEventListener('submit', async (e) => {
     const formData = new FormData(elements.transactionForm);
     const data = Object.fromEntries(formData);
 
-    if (data.type !== 'SALE' && data.type !== 'DEBT' && data.type !== 'DEBIT' && !data.customer) {
-        showToast('Please select a customer', 'error');
+    if (data.type !== 'SALE' && data.type !== 'DEBT' && data.type !== 'DEBIT' && data.type !== 'CREDIT' && !data.customer) {
+        showToast(t('select_customer_error'), 'error');
         return;
     }
 
     if ((data.type === 'SALE' || data.type === 'DEBT' || data.type === 'DEBIT') && !data.product_name) {
         const messageMap = {
-            'DEBT': 'Please enter the product borrowed',
-            'DEBIT': 'Please enter the product/service name',
-            'SALE': 'Please enter the product sold'
+            'DEBT': t('enter_product_error'),
+            'DEBIT': t('enter_product_error'),
+            'SALE': t('enter_product_error')
         };
-        showToast(messageMap[data.type] || 'Please enter the product name', 'error');
+        showToast(messageMap[data.type] || t('enter_product_error'), 'error');
         return;
     }
 
     if (data.type === 'DEBT' && !data.borrower_name) {
-        showToast('Please enter the borrower name', 'error');
+        showToast(t('enter_borrower_error'), 'error');
         return;
     }
 
     if (data.type === 'DEBIT' && !data.payer_name) {
-        showToast('Please enter the customer name', 'error');
+        showToast(t('enter_customer_name_error'), 'error');
         return;
     }
 
     const result = await createTransaction(data);
     if (result) {
         const balanceMessage = result.new_balance === null
-            ? 'Product sale recorded.'
-            : `New balance: ${formatCurrency(result.new_balance)}`;
-        showToast(`Transaction added successfully! ${balanceMessage}`, 'success');
+            ? t('product_sale_recorded')
+            : `${t('new_balance')} ${formatCurrency(result.new_balance)}`;
+        showToast(`${t('transaction_added')} ${balanceMessage}`, 'success');
         closeTransactionModal();
         
-        // Refresh data
         await fetchCustomers();
         renderCustomers();
         await renderDebts();
@@ -760,39 +964,34 @@ async function initApp() {
     
     try {
         await loadCurrentUser();
-        // Load customers
+        await loadLanguagePreference();
         await fetchCustomers();
         renderCustomers();
-        
-        // Load debts
         await renderDebts();
-        
-        // Load daily summary
         await updateDailySummary();
 
         const backupStatus = new URLSearchParams(window.location.search);
         if (backupStatus.get('backup') === 'success') {
-            showToast('Backup uploaded to Google Drive.', 'success');
+            showToast(t('backup_success'), 'success');
         } else if (backupStatus.get('backup') === 'error') {
-            showToast(backupStatus.get('message') || 'Google Drive backup failed.', 'error', 6000);
+            showToast(backupStatus.get('message') || t('backup_error'), 'error', 6000);
         }
         if (backupStatus.has('backup')) {
             window.history.replaceState({}, document.title, window.location.pathname);
         }
         
-        // Setup refresh interval
         setInterval(async () => {
             await fetchCustomers();
             renderCustomers();
             await renderDebts();
             await updateDailySummary();
-        }, 30000); // Refresh every 30 seconds
+        }, 30000);
         
-        showToast('App loaded successfully', 'success', 2000);
+        showToast(t('app_loaded'), 'success', 2000);
     } catch (error) {
         console.error('Error initializing app:', error);
         if (window.location.pathname !== '/login/' && window.location.pathname !== '/register/') {
-            showToast('Error loading app', 'error');
+            showToast(t('error_loading_app'), 'error');
         }
     } finally {
         appState.isLoading = false;

@@ -28,11 +28,27 @@
             <div class="form-group">
                 <label for="passwordInput">Password</label>
                 <input class="form-input" id="passwordInput" name="password" type="password" required autocomplete="current-password">
+                <div class="password-strength-container" id="regStrengthContainer" hidden>
+                    <div class="password-strength-bar">
+                        <div class="password-strength-fill" id="regStrengthFill"></div>
+                    </div>
+                    <span class="password-strength-label" id="regStrengthLabel"></span>
+                    <ul class="password-checklist" id="regChecklist">
+                        <li data-check="length">At least 8 characters</li>
+                        <li data-check="upper">One uppercase letter</li>
+                        <li data-check="lower">One lowercase letter</li>
+                        <li data-check="number">One number</li>
+                        <li data-check="special">One special character</li>
+                    </ul>
+                </div>
             </div>
             <p class="auth-error" id="authError" role="alert"></p>
             <button class="btn btn-primary auth-submit" type="submit" id="authSubmit">Sign in</button>
         </form>
-        <a id="authSwitch" href="/register/">Register your business</a>
+        <div class="auth-links">
+            <a id="authSwitch" href="/register/">Register your business</a>
+            <a id="forgotPasswordLink" href="/forgot-password/" class="auth-link-secondary" hidden>Forgot Password?</a>
+        </div>
     </main>
     <script>
         const isRegister = window.location.pathname === '/register/';
@@ -42,6 +58,12 @@
         const authSubmit = document.getElementById('authSubmit');
         const authSwitch = document.getElementById('authSwitch');
         const authError = document.getElementById('authError');
+        const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+        const regStrengthContainer = document.getElementById('regStrengthContainer');
+        const regFill = document.getElementById('regStrengthFill');
+        const regLabel = document.getElementById('regStrengthLabel');
+        const regChecklist = document.getElementById('regChecklist');
+
         if (isRegister) {
             businessGroup.hidden = false;
             businessInput.required = true;
@@ -49,7 +71,38 @@
             authSubmit.textContent = 'Create account';
             authSwitch.textContent = 'Already have an account? Sign in';
             authSwitch.href = '/login/';
+            regStrengthContainer.hidden = false;
+        } else {
+            forgotPasswordLink.hidden = false;
         }
+
+        // Password strength for registration
+        const passwordInput = document.getElementById('passwordInput');
+        passwordInput.addEventListener('input', () => {
+            if (!isRegister) return;
+            const val = passwordInput.value;
+            const checks = {
+                length: val.length >= 8,
+                upper: /[A-Z]/.test(val),
+                lower: /[a-z]/.test(val),
+                number: /[0-9]/.test(val),
+                special: /[^A-Za-z0-9]/.test(val),
+            };
+            const passed = Object.values(checks).filter(Boolean).length;
+            regChecklist.querySelectorAll('li').forEach(li => {
+                const key = li.dataset.check;
+                li.classList.toggle('passed', checks[key]);
+            });
+            let score = 0, label = '', color = '';
+            if (passed <= 2) { score = 33; label = 'Weak'; color = '#D32F2F'; }
+            else if (passed <= 4) { score = 66; label = 'Medium'; color = '#FFA500'; }
+            else { score = 100; label = 'Strong'; color = '#388E3C'; }
+            regFill.style.width = score + '%';
+            regFill.style.backgroundColor = color;
+            regLabel.textContent = label;
+            regLabel.style.color = color;
+        });
+
         function csrfToken() {
             return document.querySelector('[name=csrfmiddlewaretoken]').value;
         }

@@ -18,6 +18,7 @@ urlpatterns = [
     ), name='home'),
     path('login/', TemplateView.as_view(template_name='auth.html'), name='login-page'),
     path('register/', TemplateView.as_view(template_name='auth.html'), name='register-page'),
+    path('forgot-password/', TemplateView.as_view(template_name='forgot_password.html'), name='forgot-password-page'),
     path('sw.js', serve, {'path': 'sw.js', 'document_root': settings.PROJECT_ROOT / 'frontend' / 'static'}),
 ]
 

@@ -1,5 +1,5 @@
 from django.db import transaction, models
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
@@ -7,23 +7,30 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils import timezone
+from django.conf import settings
 from rest_framework import status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.exceptions import ValidationError
 from decimal import Decimal
 from datetime import timedelta
 import io
 import json
 import os
+import secrets
 from urllib.parse import quote
 
 
-from .models import Business, Customer, GoogleDriveConnection, Transaction
+from .models import (
+    Business, Customer, GoogleDriveConnection, Transaction,
+    DebtPayment, PasswordResetOTP, UserPreference, Purchase, PurchaseItem
+)
 from .serializers import (
     CustomerSerializer, TransactionSerializer, TransactionCreateSerializer,
-    CustomerDetailSerializer, DailySummarySerializer
+    CustomerDetailSerializer, DailySummarySerializer,
+    DebtPaymentSerializer, DebtPaymentCreateSerializer,
+    UserPreferenceSerializer, PurchaseSerializer, PurchaseCreateSerializer
 )
 
 GOOGLE_DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive.file']
@@ -134,20 +141,73 @@ def upload_user_backup(user, credentials):
         owner=user,
         defaults={'name': f"{user.username}'s business"},
     )
-    customers = Customer.objects.filter(shop=user).values('id', 'name', 'phone', 'total_balance', 'created_at', 'updated_at')
+    customers = Customer.objects.filter(shop=user).values(
+        'id', 'name', 'phone', 'total_balance', 'created_at', 'updated_at'
+    )
     transactions = Transaction.objects.filter(
         Q(customer__shop=user) | Q(customer__isnull=True, entered_by=user)
-    ).values('id', 'customer_id', 'product_name', 'type', 'amount', 'description', 'date_created', 'date_updated', 'entered_by_id')
+    ).values(
+        'id', 'customer_id', 'borrower_name', 'product_name', 'type',
+        'amount', 'description', 'date_created', 'date_updated', 'entered_by_id'
+    )
+    payment_ids = list(transactions.values_list('id', flat=True))
+    payments = DebtPayment.objects.filter(debt_id__in=payment_ids).values(
+        'id', 'debt_id', 'amount', 'description', 'date_created'
+    )
+    try:
+        pref = UserPreference.objects.get(user=user)
+        prefs_data = {'language': pref.language}
+    except UserPreference.DoesNotExist:
+        prefs_data = {'language': 'en'}
+
+    purchases = Purchase.objects.filter(owner=user)
+    purchases_data = []
+    for p in purchases:
+        purchases_data.append({
+            'id': p.id,
+            'purchase_date': p.purchase_date.isoformat(),
+            'description': p.description,
+            'total_amount': str(p.total_amount),
+            'items': list(p.items.values('product_name', 'quantity', 'unit_purchase_price', 'total_amount')),
+        })
+
     export = {
-        'business_name': business.name,
-        'exported_at': timezone.now().isoformat(),
+        'backup_version': '3.0',
+        'backup_date': timezone.now().isoformat(),
+        'user_data': {
+            'username': user.username,
+            'business_name': business.name,
+        },
         'customers': list(customers),
         'transactions': list(transactions),
+        'payments': list(payments),
+        'purchases': purchases_data,
+        'settings': prefs_data,
     }
     payload = json.dumps(export, default=str, indent=2).encode('utf-8')
     drive = build('drive', 'v3', credentials=credentials)
-    metadata = {'name': f"{business.name} ledger backup {timezone.now():%Y-%m-%d %H-%M-%S}.json", 'mimeType': 'application/json'}
-    drive.files().create(body=metadata, media_body=MediaIoBaseUpload(io.BytesIO(payload), mimetype='application/json'), fields='id').execute()
+
+    folder_name = 'Shop Ledger Backups'
+    query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and trashed=false"
+    results = drive.files().list(q=query, fields='files(id)').execute()
+    files = results.get('files', [])
+    if files:
+        folder_id = files[0]['id']
+    else:
+        folder_metadata = {'name': folder_name, 'mimeType': 'application/vnd.google-apps.folder'}
+        folder = drive.files().create(body=folder_metadata, fields='id').execute()
+        folder_id = folder['id']
+
+    metadata = {
+        'name': f"{business.name} ledger backup {timezone.now():%Y-%m-%d %H-%M-%S}.json",
+        'mimeType': 'application/json',
+        'parents': [folder_id],
+    }
+    drive.files().create(
+        body=metadata,
+        media_body=MediaIoBaseUpload(io.BytesIO(payload), mimetype='application/json'),
+        fields='id'
+    ).execute()
 
 
 @api_view(['GET'])
@@ -157,9 +217,11 @@ def current_user(request):
         owner=request.user,
         defaults={'name': f"{request.user.username}'s business"},
     )
+    pref, _ = UserPreference.objects.get_or_create(user=request.user)
     return Response({
         'username': request.user.username,
         'business_name': business.name,
+        'language': pref.language,
     })
 
 
@@ -201,8 +263,11 @@ def login_user(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def logout_user(request):
+    request.session.flush()
     logout(request)
-    return Response(status=status.HTTP_204_NO_CONTENT)
+    response = Response(status=status.HTTP_204_NO_CONTENT)
+    response.delete_cookie('sessionid')
+    return response
 
 
 @api_view(['POST'])
@@ -409,3 +474,334 @@ def activity_report(request):
         'total_sales': totals_by_type.get('SALE', Decimal('0.00')),
         'transactions': TransactionSerializer(transactions, many=True).data,
     })
+
+
+# ========================================
+# Debt Payment Endpoints
+# ========================================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_debt_payment(request):
+    """Record a payment against a DEBT transaction."""
+    serializer = DebtPaymentCreateSerializer(data=request.data, context={'request': request})
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    debt_id = serializer.validated_data['debt_id']
+    amount = serializer.validated_data['amount']
+    description = serializer.validated_data.get('description', '')
+
+    try:
+        with transaction.atomic():
+            debt = Transaction.objects.select_for_update().get(id=debt_id, type='DEBT')
+
+            total_paid = DebtPayment.objects.filter(debt=debt).aggregate(
+                total=Sum('amount')
+            )['total'] or Decimal('0.00')
+            remaining = debt.amount - total_paid
+
+            if amount > remaining:
+                return Response(
+                    {'error': f'Payment of {amount} exceeds remaining balance of {remaining}.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            payment = DebtPayment.objects.create(
+                debt=debt,
+                amount=amount,
+                description=description,
+                recorded_by=request.user,
+            )
+
+            new_total_paid = total_paid + amount
+            new_remaining = debt.amount - new_total_paid
+            payment_status = 'PAID' if new_remaining <= 0 else 'PARTIALLY_PAID'
+
+            return Response({
+                'id': payment.id,
+                'debt_id': debt.id,
+                'amount': str(payment.amount),
+                'original_amount': str(debt.amount),
+                'total_paid': str(new_total_paid),
+                'remaining_balance': str(max(new_remaining, Decimal('0.00'))),
+                'status': payment_status,
+                'message': 'Payment recorded successfully.'
+            }, status=status.HTTP_201_CREATED)
+    except Transaction.DoesNotExist:
+        return Response({'error': 'Debt transaction not found.'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def debt_payments(request, debt_id):
+    """List all payments for a specific debt transaction."""
+    try:
+        debt = Transaction.objects.get(id=debt_id, type='DEBT')
+        if debt.customer_id:
+            if debt.customer.shop_id != request.user.id:
+                return Response({'error': 'Debt not found.'}, status=status.HTTP_404_NOT_FOUND)
+        elif debt.entered_by_id != request.user.id:
+            return Response({'error': 'Debt not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        payments = DebtPayment.objects.filter(debt=debt)
+        total_paid = payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        remaining = debt.amount - total_paid
+
+        return Response({
+            'debt': {
+                'id': debt.id,
+                'borrower_name': debt.borrower_name,
+                'product_name': debt.product_name,
+                'amount': str(debt.amount),
+                'description': debt.description,
+                'date_created': debt.date_created.isoformat(),
+            },
+            'payments': DebtPaymentSerializer(payments, many=True).data,
+            'total_paid': str(total_paid),
+            'remaining_balance': str(max(remaining, Decimal('0.00'))),
+            'status': 'PAID' if remaining <= 0 else ('PARTIALLY_PAID' if total_paid > 0 else 'UNPAID'),
+        })
+    except Transaction.DoesNotExist:
+        return Response({'error': 'Debt not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+# ========================================
+# Password Reset (OTP) Endpoints
+# ========================================
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def request_password_reset(request):
+    """Send OTP to the email associated with the username."""
+    username = str(request.data.get('username', '')).strip()
+    if not username:
+        return Response({'error': 'Username is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = User.objects.get(username__iexact=username)
+    except User.DoesNotExist:
+        return Response({'message': 'If an account with that username exists, an OTP has been sent.'}, status=status.HTTP_200_OK)
+
+    if not user.email:
+        return Response({'message': 'If an account with that username exists, an OTP has been sent.'}, status=status.HTTP_200_OK)
+
+    PasswordResetOTP.objects.filter(user=user, is_used=False).update(is_used=True)
+
+    otp = PasswordResetOTP.generate_otp()
+    otp_hash = PasswordResetOTP.hash_otp(otp)
+    expiry_minutes = getattr(settings, 'OTP_EXPIRY_MINUTES', 10)
+
+    PasswordResetOTP.objects.create(
+        user=user,
+        otp_hash=otp_hash,
+        expires_at=timezone.now() + timedelta(minutes=expiry_minutes),
+    )
+
+    try:
+        from django.core.mail import send_mail
+        send_mail(
+            subject='Shop Ledger - Password Reset OTP',
+            message=f'Your OTP for password reset is: {otp}\n\nThis OTP expires in {expiry_minutes} minutes.',
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@shopledger.com'),
+            recipient_list=[user.email],
+            fail_silently=True,
+        )
+    except Exception:
+        pass
+
+    return Response({'message': 'If an account with that username exists, an OTP has been sent.'}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def verify_password_otp(request):
+    """Verify the OTP entered by the user."""
+    username = str(request.data.get('username', '')).strip()
+    otp_input = str(request.data.get('otp', '')).strip()
+
+    if not username or not otp_input:
+        return Response({'error': 'Username and OTP are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = User.objects.get(username__iexact=username)
+    except User.DoesNotExist:
+        return Response({'error': 'Invalid request.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    otp_record = PasswordResetOTP.objects.filter(user=user, is_used=False).order_by('-created_at').first()
+    if not otp_record:
+        return Response({'error': 'No active OTP found. Please request a new one.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    valid, message = otp_record.verify(otp_input)
+    if not valid:
+        return Response({'error': message}, status=status.HTTP_400_BAD_REQUEST)
+
+    reset_token = secrets.token_urlsafe(32)
+    request.session['password_reset_token'] = reset_token
+    request.session['password_reset_user_id'] = user.id
+    request.session['password_reset_verified'] = True
+
+    return Response({'message': 'OTP verified. You can now set a new password.', 'reset_token': reset_token}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def complete_password_reset(request):
+    """Set a new password after OTP verification."""
+    username = str(request.data.get('username', '')).strip()
+    new_password = request.data.get('new_password', '')
+    reset_token = request.data.get('reset_token', '')
+
+    if not username or not new_password or not reset_token:
+        return Response({'error': 'Username, new password, and reset token are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if request.session.get('password_reset_token') != reset_token:
+        return Response({'error': 'Invalid or expired reset token.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not request.session.get('password_reset_verified'):
+        return Response({'error': 'OTP verification required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = User.objects.get(username__iexact=username)
+    except User.DoesNotExist:
+        return Response({'error': 'Invalid request.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        validate_password(new_password, user)
+    except DjangoValidationError as exc:
+        return Response({'error': exc.messages}, status=status.HTTP_400_BAD_REQUEST)
+
+    user.set_password(new_password)
+    user.save()
+
+    request.session.pop('password_reset_token', None)
+    request.session.pop('password_reset_user_id', None)
+    request.session.pop('password_reset_verified', None)
+
+    PasswordResetOTP.objects.filter(user=user, is_used=False).update(is_used=True)
+
+    return Response({'message': 'Password updated successfully. You can now log in.'}, status=status.HTTP_200_OK)
+
+
+# ========================================
+# User Preference Endpoints
+# ========================================
+
+@api_view(['GET', 'PUT', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def user_preferences(request):
+    """Get or update user preferences (language)."""
+    pref, _ = UserPreference.objects.get_or_create(user=request.user)
+
+    if request.method == 'GET':
+        return Response({'language': pref.language})
+
+    language = request.data.get('language', pref.language)
+    if language not in ('en', 'sw'):
+        return Response({'error': 'Language must be "en" or "sw".'}, status=status.HTTP_400_BAD_REQUEST)
+
+    pref.language = language
+    pref.save(update_fields=['language', 'updated_at'])
+    return Response({'language': pref.language})
+
+
+# ========================================
+# Purchase Endpoints
+# ========================================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_purchase(request):
+    """Create a purchase with its line items. Backend computes all totals."""
+    serializer = PurchaseCreateSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    data = serializer.validated_data
+    purchase_date = data.get('purchase_date') or timezone.localdate()
+    description = data.get('description', '')
+
+    try:
+        with transaction.atomic():
+            purchase = Purchase.objects.create(
+                owner=request.user,
+                purchase_date=purchase_date,
+                description=description,
+                total_amount=Decimal('0.00'),
+            )
+
+            items = []
+            total = Decimal('0.00')
+            for item in data['items']:
+                product_name = (item.get('product_name') or '').strip()
+                quantity = Decimal(str(item['quantity']))
+                unit_price = Decimal(str(item['unit_purchase_price']))
+                line_total = quantity * unit_price
+                total += line_total
+                items.append({
+                    'product_name': product_name,
+                    'quantity': quantity,
+                    'unit_purchase_price': unit_price,
+                    'total_amount': line_total,
+                })
+
+            for it in items:
+                PurchaseItem.objects.create(purchase=purchase, **it)
+
+            purchase.total_amount = total
+            purchase.save(update_fields=['total_amount'])
+
+            return Response({
+                'id': purchase.id,
+                'purchase_date': purchase.purchase_date.isoformat(),
+                'description': purchase.description,
+                'total_amount': str(total),
+                'item_count': len(items),
+                'items': items,
+                'message': 'Purchase recorded successfully.'
+            }, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def purchase_list(request):
+    """List purchases for the current user."""
+    purchases = Purchase.objects.filter(owner=request.user).prefetch_related('items')
+    purchase_date = request.query_params.get('date')
+    if purchase_date:
+        purchases = purchases.filter(purchase_date=purchase_date)
+    serializer = PurchaseSerializer(purchases, many=True)
+    total_spent = purchases.aggregate(total=models.Sum('total_amount'))['total'] or Decimal('0.00')
+    return Response({
+        'count': purchases.count(),
+        'total_spent': str(total_spent),
+        'purchases': serializer.data,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def purchase_detail(request, purchase_id):
+    """Get a single purchase with items."""
+    try:
+        purchase = Purchase.objects.get(id=purchase_id, owner=request.user)
+    except Purchase.DoesNotExist:
+        return Response({'error': 'Purchase not found.'}, status=status.HTTP_404_NOT_FOUND)
+    serializer = PurchaseSerializer(purchase)
+    return Response(serializer.data)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def purchase_delete(request, purchase_id):
+    """Delete a purchase and its items."""
+    try:
+        purchase = Purchase.objects.get(id=purchase_id, owner=request.user)
+    except Purchase.DoesNotExist:
+        return Response({'error': 'Purchase not found.'}, status=status.HTTP_404_NOT_FOUND)
+    purchase.delete()
+    return Response({'message': 'Purchase deleted.'}, status=status.HTTP_200_OK)
