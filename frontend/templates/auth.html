@@ -1,0 +1,76 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0F5132">
+    <link rel="manifest" href="{% static 'manifest.json' %}">
+    <link rel="icon" type="image/png" href="{% static 'images/icon-192x192.png' %}">
+    <link rel="apple-touch-icon" href="{% static 'images/icon-192x192.png' %}">
+    <title>Shop Ledger account</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body class="auth-page">
+    <main class="auth-panel">
+        <h1>Shop Ledger</h1>
+        <p id="authIntro">Sign in to your business ledger.</p>
+        <form id="authForm">
+            {% csrf_token %}
+            <div class="form-group" id="businessGroup" hidden>
+                <label for="businessNameInput">Business name</label>
+                <input class="form-input" id="businessNameInput" name="business_name" type="text" autocomplete="organization">
+            </div>
+            <div class="form-group">
+                <label for="usernameInput">Username</label>
+                <input class="form-input" id="usernameInput" name="username" type="text" required autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label for="passwordInput">Password</label>
+                <input class="form-input" id="passwordInput" name="password" type="password" required autocomplete="current-password">
+            </div>
+            <p class="auth-error" id="authError" role="alert"></p>
+            <button class="btn btn-primary auth-submit" type="submit" id="authSubmit">Sign in</button>
+        </form>
+        <a id="authSwitch" href="/register/">Register your business</a>
+    </main>
+    <script>
+        const isRegister = window.location.pathname === '/register/';
+        const businessGroup = document.getElementById('businessGroup');
+        const businessInput = document.getElementById('businessNameInput');
+        const authIntro = document.getElementById('authIntro');
+        const authSubmit = document.getElementById('authSubmit');
+        const authSwitch = document.getElementById('authSwitch');
+        const authError = document.getElementById('authError');
+        if (isRegister) {
+            businessGroup.hidden = false;
+            businessInput.required = true;
+            authIntro.textContent = 'Create an account for your business.';
+            authSubmit.textContent = 'Create account';
+            authSwitch.textContent = 'Already have an account? Sign in';
+            authSwitch.href = '/login/';
+        }
+        function csrfToken() {
+            return document.querySelector('[name=csrfmiddlewaretoken]').value;
+        }
+        document.getElementById('authForm').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            authError.textContent = '';
+            const form = new FormData(event.target);
+            const payload = {username: form.get('username'), password: form.get('password')};
+            if (isRegister) payload.business_name = form.get('business_name');
+            const response = await fetch(isRegister ? '/api/auth/register/' : '/api/auth/login/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken()},
+                body: JSON.stringify(payload),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                authError.textContent = Array.isArray(data.error) ? data.error.join(' ') : data.error;
+                return;
+            }
+            window.location.href = '/';
+        });
+    </script>
+</body>
+</html>

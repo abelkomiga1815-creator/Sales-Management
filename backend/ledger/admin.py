@@ -24,13 +24,13 @@ class CustomerAdmin(admin.ModelAdmin):
 
 @admin.register(Transaction)
 class TransactionAdmin(admin.ModelAdmin):
-    list_display = ('id', 'customer', 'product_name', 'type', 'amount', 'date_created', 'entered_by')
+    list_display = ('id', 'customer', 'borrower_name', 'product_name', 'type', 'amount', 'date_created', 'entered_by')
     list_filter = ('type', 'date_created', 'customer__shop')
-    search_fields = ('customer__name', 'product_name', 'description')
+    search_fields = ('customer__name', 'borrower_name', 'product_name', 'description')
     readonly_fields = ('date_created', 'date_updated')
     fieldsets = (
         ('Transaction Details', {
-            'fields': ('customer', 'product_name', 'type', 'amount', 'description')
+            'fields': ('customer', 'borrower_name', 'product_name', 'type', 'amount', 'description')
         }),
         ('User Info', {
             'fields': ('entered_by',)

@@ -1,4 +1,4 @@
-// Shop Ledger PWA - Main Application Script
+closed// Shop Ledger PWA - Main Application Script
 
 // API Configuration
 const API_BASE = '/api';
@@ -125,8 +125,14 @@ function getCSRFToken() {
 
 async function fetchCustomers() {
     try {
-        const response = await fetch(API_CUSTOMERS);
-        if (!response.ok) throw new Error('Failed to fetch customers');
+        const response = await fetch(API_CUSTOMERS, { credentials: 'include' });
+        if (!response.ok) {
+            if (response.status === 401 || response.status === 403) {
+                window.location.href = '/login/';
+                return [];
+            }
+            throw new Error('Failed to fetch customers');
+        }
         const data = await response.json();
         appState.customers = data.results || data;
         appState.filteredCustomers = [...appState.customers];
@@ -140,7 +146,11 @@ async function fetchCustomers() {
 }
 
 async function loadCurrentUser() {
-    const response = await fetch(`${API_BASE}/auth/me/`);
+    const response = await fetch(`${API_BASE}/auth/me/`, { credentials: 'include' });
+    if (response.status === 401 || response.status === 403) {
+        window.location.href = '/login/';
+        return;
+    }
     if (!response.ok) throw new Error('Unable to load account');
     const user = await response.json();
     elements.businessName.textContent = `${user.business_name} (${user.username})`;
@@ -160,7 +170,11 @@ function startGoogleBackup() {
 
 async function fetchDailySummary() {
     try {
-        const response = await fetch(API_DAILY_SUMMARY);
+        const response = await fetch(API_DAILY_SUMMARY, { credentials: 'include' });
+        if (response.status === 401 || response.status === 403) {
+            window.location.href = '/login/';
+            return null;
+        }
         if (!response.ok) throw new Error('Failed to fetch daily summary');
         const data = await response.json();
         return data;
@@ -173,7 +187,11 @@ async function fetchDailySummary() {
 
 async function fetchCustomerHistory(customerId) {
     try {
-        const response = await fetch(`${API_CUSTOMERS}${customerId}/history/`);
+        const response = await fetch(`${API_CUSTOMERS}${customerId}/history/`, { credentials: 'include' });
+        if (response.status === 401 || response.status === 403) {
+            window.location.href = '/login/';
+            return null;
+        }
         if (!response.ok) throw new Error('Failed to fetch history');
         const data = await response.json();
         return data;
@@ -186,7 +204,11 @@ async function fetchCustomerHistory(customerId) {
 
 async function fetchActivityReport() {
     try {
-        const response = await fetch(API_ACTIVITY_REPORT);
+        const response = await fetch(API_ACTIVITY_REPORT, { credentials: 'include' });
+        if (response.status === 401 || response.status === 403) {
+            window.location.href = '/login/';
+            return null;
+        }
         if (!response.ok) throw new Error('Failed to fetch activity report');
         return await response.json();
     } catch (error) {
@@ -201,6 +223,10 @@ async function fetchDebts() {
         const response = await fetch(`${API_BASE}/transactions/?type=DEBT`, {
             credentials: 'include',
         });
+        if (response.status === 401 || response.status === 403) {
+            window.location.href = '/login/';
+            return [];
+        }
         if (!response.ok) throw new Error('Failed to fetch debts');
         const data = await response.json();
         return data.results || data;
@@ -215,6 +241,7 @@ async function createTransaction(formData) {
     try {
         const response = await fetch(API_TRANSACTIONS, {
             method: 'POST',
+            credentials: 'include',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCSRFToken(),
@@ -247,6 +274,7 @@ async function createCustomer(name, phone) {
     try {
         const response = await fetch(API_CUSTOMERS, {
             method: 'POST',
+            credentials: 'include',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCSRFToken(),
@@ -270,6 +298,7 @@ async function deleteTransaction(transactionId) {
     try {
         const response = await fetch(`${API_BASE}/transactions/${transactionId}/`, {
             method: 'DELETE',
+            credentials: 'include',
             headers: {
                 'X-CSRFToken': getCSRFToken(),
             },
@@ -723,6 +752,10 @@ elements.transactionForm.addEventListener('submit', async (e) => {
 // ========================================
 
 async function initApp() {
+    if (!document.getElementById('businessName') || !document.getElementById('customersList') || !document.getElementById('toast')) {
+        return;
+    }
+
     appState.isLoading = true;
     
     try {
@@ -758,7 +791,9 @@ async function initApp() {
         showToast('App loaded successfully', 'success', 2000);
     } catch (error) {
         console.error('Error initializing app:', error);
-        showToast('Error loading app', 'error');
+        if (window.location.pathname !== '/login/' && window.location.pathname !== '/register/') {
+            showToast('Error loading app', 'error');
+        }
     } finally {
         appState.isLoading = false;
     }

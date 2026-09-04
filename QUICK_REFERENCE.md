@@ -25,6 +25,7 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 # Update .env with your DB credentials
+cd backend
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
@@ -36,12 +37,12 @@ python manage.py runserver
 
 ```
 LedgerPWD/
-├── shop_ledger/         # Django project config
-├── ledger/              # Django app (models, views, API)
-├── templates/           # Single-page app HTML
-├── static/              # CSS, JS, PWA files
+├── backend/             # Django project and app
+│   ├── shop_ledger/     # Django project config
+│   ├── ledger/          # Django app (models, views, API)
+│   └── manage.py        # Django CLI
+├── frontend/            # Templates, CSS, JS, PWA files
 ├── docker-compose.yml   # Docker services
-├── manage.py            # Django CLI
 ├── requirements.txt     # Python packages
 └── README.md            # Full documentation
 ```
@@ -89,6 +90,8 @@ LedgerPWD/
 ## 🛠️ Development Commands
 
 ```bash
+cd backend
+
 # Run Django development server
 python manage.py runserver
 

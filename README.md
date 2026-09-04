@@ -27,14 +27,15 @@ shop_ledger/
 ├── Dockerfile                  # Django app container
 ├── requirements.txt            # Python dependencies
 ├── .env                        # Environment variables (template)
-├── manage.py                   # Django management script
-├── shop_ledger/               # Main Django project
+├── backend/                    # Django backend
+│   ├── manage.py               # Django management script
+│   ├── shop_ledger/            # Main Django project
 │   ├── __init__.py
 │   ├── settings.py            # Django configuration
 │   ├── urls.py                # URL routing
 │   ├── asgi.py
 │   └── wsgi.py
-├── ledger/                     # Django app
+│   ├── ledger/                 # Django app
 │   ├── __init__.py
 │   ├── admin.py               # Admin configuration
 │   ├── apps.py
@@ -43,17 +44,15 @@ shop_ledger/
 │   ├── urls.py                # API endpoints
 │   ├── views.py               # API views
 │   └── migrations/
-├── templates/
-│   └── index.html             # SPA HTML
-├── static/
-│   ├── css/
-│   │   └── style.css          # Main stylesheet
-│   ├── js/
-│   │   └── app.js             # Frontend application logic
-│   ├── manifest.json          # PWA manifest
-│   ├── sw.js                  # Service worker
-│   └── images/               # App icons (placeholders)
-└── .gitignore
+└── frontend/                  # Frontend templates and static assets
+  ├── templates/
+  │   └── index.html          # SPA HTML
+  └── static/
+    ├── css/style.css       # Main stylesheet
+    ├── js/app.js           # Frontend application logic
+    ├── manifest.json       # PWA manifest
+    ├── sw.js               # Service worker
+    └── images/              # Branded PWA install icons
 ```
 
 ## Prerequisites
@@ -159,6 +158,7 @@ DB_PORT=5432
 ### 5. Run Migrations
 
 ```bash
+cd backend
 python manage.py migrate
 ```
 

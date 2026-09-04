@@ -4,8 +4,8 @@
   "description": "A Progressive Web App for managing shop customer accounts and transactions",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FFFFFF",
-  "theme_color": "#1B5E20",
+  "background_color": "#0F5132",
+  "theme_color": "#0F5132",
   "orientation": "portrait-primary",
   "scope": "/",
   "icons": [
@@ -22,18 +22,10 @@
       "purpose": "any"
     },
     {
-      "src": "/static/images/icon-192x192.png",
-      "sizes": "192x192",
+      "src": "/static/images/maskable-icon-512x512.png",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "/static/images/screenshot-540x720.png",
-      "sizes": "540x720",
-      "type": "image/png",
-      "form_factor": "narrow"
     }
   ],
   "categories": ["business", "productivity"],

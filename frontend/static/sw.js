@@ -1,15 +1,15 @@
 // Shop Ledger Service Worker
-// Handles offline caching for static assets and index.html
+// Handles offline caching for static assets and the app shell
 
-const CACHE_NAME = 'shop-ledger-v1';
+const CACHE_NAME = 'shop-ledger-v2';
 const STATIC_ASSETS = [
     '/',
-    '/index.html',
     '/static/css/style.css',
     '/static/js/app.js',
     '/static/manifest.json',
     '/static/images/icon-192x192.png',
     '/static/images/icon-512x512.png',
+    '/static/images/maskable-icon-512x512.png',
 ];
 
 // Install Event - Cache static assets

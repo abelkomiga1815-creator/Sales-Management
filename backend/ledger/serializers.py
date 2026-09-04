@@ -17,27 +17,51 @@ class TransactionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Transaction
-        fields = ['id', 'customer', 'customer_name', 'product_name', 'type', 'amount', 'description', 
+        fields = ['id', 'customer', 'customer_name', 'borrower_name', 'product_name', 'type', 'amount', 'description',
                   'date_created', 'date_updated', 'entered_by', 'entered_by_name']
         read_only_fields = ['id', 'date_created', 'date_updated', 'entered_by']
+
+    def validate_customer(self, customer):
+        request = self.context.get('request')
+        if request and customer and customer.shop_id != request.user.id:
+            raise serializers.ValidationError('Customer not found.')
+        return customer
 
 
 class TransactionCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating transactions."""
     class Meta:
         model = Transaction
-        fields = ['customer', 'product_name', 'type', 'amount', 'description']
+        fields = ['customer', 'borrower_name', 'product_name', 'type', 'amount', 'description']
         extra_kwargs = {
             'customer': {'required': False, 'allow_null': True},
+            'borrower_name': {'required': False, 'allow_blank': True, 'default': ''},
             'product_name': {'required': False, 'allow_blank': True},
         }
 
     def validate(self, attrs):
+        customer = attrs.get('customer')
+        if customer and customer.shop_id != self.context['request'].user.id:
+            raise serializers.ValidationError({'customer': 'Customer not found.'})
+
         transaction_type = attrs.get('type')
-        if transaction_type == 'SALE' and not attrs.get('product_name'):
+        borrower_name = (attrs.get('borrower_name') or '').strip()
+        product_name = (attrs.get('product_name') or '').strip()
+
+        if transaction_type == 'SALE' and not product_name:
             raise serializers.ValidationError({'product_name': 'Enter the product sold.'})
-        if transaction_type in ('CREDIT', 'DEBIT') and not attrs.get('customer'):
-            raise serializers.ValidationError({'customer': 'Select a customer for credit or debit.'})
+        if transaction_type == 'DEBT':
+            if not borrower_name:
+                raise serializers.ValidationError({'borrower_name': 'Enter the borrower name.'})
+            if not product_name:
+                raise serializers.ValidationError({'product_name': 'Enter the product borrowed.'})
+        if transaction_type == 'DEBIT':
+            if not borrower_name:
+                raise serializers.ValidationError({'borrower_name': 'Enter the customer name.'})
+            if not product_name:
+                raise serializers.ValidationError({'product_name': 'Enter the product/service name.'})
+        if transaction_type == 'CREDIT' and not customer:
+            raise serializers.ValidationError({'customer': 'Select a customer for credit.'})
         return attrs
 
 

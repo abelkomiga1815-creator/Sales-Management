@@ -6,6 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.static import serve
 from django.views.generic import TemplateView
 
 urlpatterns = [
@@ -13,8 +14,11 @@ urlpatterns = [
     path('api/', include('ledger.urls')),
     path('', login_required(
         TemplateView.as_view(template_name='index.html'),
-        login_url='/admin/login/',
+        login_url='/login/',
     ), name='home'),
+    path('login/', TemplateView.as_view(template_name='auth.html'), name='login-page'),
+    path('register/', TemplateView.as_view(template_name='auth.html'), name='register-page'),
+    path('sw.js', serve, {'path': 'sw.js', 'document_root': settings.PROJECT_ROOT / 'frontend' / 'static'}),
 ]
 
 if settings.DEBUG:
