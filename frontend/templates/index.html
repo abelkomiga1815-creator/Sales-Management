@@ -9,7 +9,7 @@
     <link rel="manifest" href="{% static 'manifest.json' %}">
     <link rel="icon" type="image/png" href="{% static 'images/icon-192x192.png' %}">
     <link rel="apple-touch-icon" href="{% static 'images/icon-192x192.png' %}">
-    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=3">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=4">
     <title>Shop Ledger</title>
 </head>
 <body>
@@ -93,7 +93,7 @@
     <div class="modal" id="transactionModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Add Transaction</h2>
+                <h2 id="transactionModalTitle" data-i18n="add_transaction">Add Transaction</h2>
                 <button class="modal-close" id="modalCloseBtn">&times;</button>
             </div>
             <form id="transactionForm" class="modal-form">
@@ -114,7 +114,7 @@
                     <input type="text" id="payerNameInput" name="payer_name" placeholder="Enter customer name..." class="form-input">
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" id="productFieldGroup">
                     <label for="productNameInput">Product <span class="required" id="productRequired">*</span></label>
                     <input type="text" id="productNameInput" name="product_name" required placeholder="Enter product name..." class="form-input">
                 </div>
@@ -127,8 +127,8 @@
                             <span class="radio-text">Credit (Given)</span>
                         </label>
                         <label class="radio-label">
-                            <input type="radio" name="type" value="DEBIT" required>
-                            <span class="radio-text">Debit Payed</span>
+                            <input type="radio" name="type" value="PURCHASE" required>
+                            <span class="radio-text">Purchase</span>
                         </label>
                         <label class="radio-label">
                             <input type="radio" name="type" value="SALE" required>
@@ -141,19 +141,33 @@
                     </div>
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" id="amountFieldGroup">
                     <label for="amountInput">Amount <span class="required">*</span></label>
                     <input type="number" id="amountInput" name="amount" step="0.01" min="0" required placeholder="0.00" class="form-input">
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" id="descriptionFieldGroup">
                     <label for="descriptionInput">Description</label>
                     <textarea id="descriptionInput" name="description" placeholder="Enter transaction description..." class="form-input form-textarea" rows="3"></textarea>
                 </div>
 
+                <div id="purchaseSection" class="purchase-section" hidden>
+                    <div class="form-group">
+                        <label for="purchaseDateInput" data-i18n="purchase_date">Purchase Date <span class="required">*</span></label>
+                        <input type="date" id="purchaseDateInput" class="form-input" required>
+                    </div>
+                    <div id="purchaseItemsContainer" class="purchase-items"></div>
+                    <button type="button" class="btn btn-secondary" id="addProductBtn" data-i18n="add_another_product">Add Another Product</button>
+                    <div class="purchase-total-summary">
+                        <span data-i18n="total_purchase_amount">Total Purchase Amount</span>
+                        <strong id="purchaseTotalAmount">TSh 0.00</strong>
+                    </div>
+                </div>
+
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" id="modalCancelBtn">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Add Transaction</button>
+                    <button type="submit" class="btn btn-primary" id="submitTransactionBtn" data-i18n="add">Add Transaction</button>
+                    <button type="submit" class="btn btn-primary" id="submitPurchaseBtn" data-i18n="save_purchase" hidden>Save Purchase</button>
                 </div>
             </form>
         </div>
@@ -226,8 +240,8 @@
     <!-- Toast Notification -->
     <div class="toast" id="toast"></div>
 
-    <script src="{% static 'js/i18n.js' %}?v=1"></script>
-    <script src="{% static 'js/app.js' %}?v=5"></script>
+    <script src="{% static 'js/i18n.js' %}?v=2"></script>
+    <script src="{% static 'js/app.js' %}?v=6"></script>
     <script>
         let installPrompt;
         const installButton = document.getElementById('installButton');

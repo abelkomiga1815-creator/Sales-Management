@@ -9,6 +9,7 @@ const API_ACTIVITY_REPORT = `${API_BASE}/activity-report/`;
 const API_DEBTS = `${API_BASE}/transactions/?type=DEBT`;
 const API_DEBT_PAY = `${API_BASE}/debts/pay/`;
 const API_PREFERENCES = `${API_BASE}/preferences/`;
+const API_PURCHASES_CREATE = `${API_BASE}/purchases/create/`;
 
 // State Management
 const appState = {
@@ -45,8 +46,19 @@ const elements = {
     payerFieldGroup: document.getElementById('payerFieldGroup'),
     payerNameInput: document.getElementById('payerNameInput'),
     payerRequired: document.getElementById('payerRequired'),
+    productFieldGroup: document.getElementById('productFieldGroup'),
     productNameInput: document.getElementById('productNameInput'),
     productRequired: document.getElementById('productRequired'),
+    amountFieldGroup: document.getElementById('amountFieldGroup'),
+    descriptionFieldGroup: document.getElementById('descriptionFieldGroup'),
+    transactionModalTitle: document.getElementById('transactionModalTitle'),
+    submitTransactionBtn: document.getElementById('submitTransactionBtn'),
+    purchaseSection: document.getElementById('purchaseSection'),
+    purchaseDateInput: document.getElementById('purchaseDateInput'),
+    purchaseItemsContainer: document.getElementById('purchaseItemsContainer'),
+    addProductBtn: document.getElementById('addProductBtn'),
+    purchaseTotalAmount: document.getElementById('purchaseTotalAmount'),
+    submitPurchaseBtn: document.getElementById('submitPurchaseBtn'),
     historyModal: document.getElementById('historyModal'),
     historyCloseBtn: document.getElementById('historyCloseBtn'),
     reportButton: document.getElementById('reportButton'),
@@ -162,6 +174,11 @@ function applyTranslations() {
     if (saleLabel) {
         const labelSpan = saleLabel.closest('.radio-label').querySelector('.radio-text');
         if (labelSpan) labelSpan.textContent = t('sale');
+    }
+    const purchaseLabel = document.querySelector('input[value="PURCHASE"]');
+    if (purchaseLabel) {
+        const labelSpan = purchaseLabel.closest('.radio-label').querySelector('.radio-text');
+        if (labelSpan) labelSpan.textContent = t('purchase');
     }
 }
 
@@ -431,6 +448,148 @@ async function deleteTransaction(transactionId) {
         console.error('Error deleting transaction:', error);
         showToast('Failed to delete transaction', 'error');
         return false;
+    }
+}
+
+async function createPurchase(payload) {
+    try {
+        const response = await fetch(API_PURCHASES_CREATE, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken(),
+            },
+            body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            const firstError = data.items
+                ? (Array.isArray(data.items) ? data.items[0] : data.items)
+                : (data.error || 'Failed to save purchase');
+            throw new Error(typeof firstError === 'string' ? firstError : JSON.stringify(firstError));
+        }
+        return data;
+    } catch (error) {
+        console.error('Error creating purchase:', error);
+        showToast(`Failed to save purchase: ${error.message}`, 'error');
+        return null;
+    }
+}
+
+// ========================================
+// Purchase Form Helpers
+// ========================================
+
+function addPurchaseItemRow(productName = '') {
+    const row = document.createElement('div');
+    row.className = 'purchase-item';
+
+    const inputs = document.createElement('div');
+    inputs.className = 'purchase-item-inputs';
+    inputs.innerHTML = `
+        <div class="purchase-item-field">
+            <label class="purchase-item-label">${t('product_name')}</label>
+            <input type="text" class="form-input purchase-product-name" placeholder="${t('enter_product_name')}" value="${productName}">
+        </div>
+        <div class="purchase-item-field purchase-item-field-narrow">
+            <label class="purchase-item-label">${t('quantity')}</label>
+            <input type="number" class="form-input purchase-quantity" min="0" step="0.01" placeholder="0">
+        </div>
+        <div class="purchase-item-field purchase-item-field-narrow">
+            <label class="purchase-item-label">${t('unit_purchase_price')}</label>
+            <input type="number" class="form-input purchase-unit-price" min="0" step="0.01" placeholder="0">
+        </div>
+    `;
+
+    const footer = document.createElement('div');
+    footer.className = 'purchase-item-footer';
+    footer.innerHTML = `
+        <div class="purchase-item-total">
+            <span class="purchase-item-total-label">${t('item_total')}:</span>
+            <span class="purchase-item-total-value">${formatCurrency(0)}</span>
+        </div>
+        <button type="button" class="btn btn-secondary purchase-remove-btn">${t('remove')}</button>
+    `;
+
+    row.appendChild(inputs);
+    row.appendChild(footer);
+    elements.purchaseItemsContainer.appendChild(row);
+
+    const recalc = () => recalculatePurchaseTotals();
+    row.querySelector('.purchase-product-name').addEventListener('input', recalc);
+    row.querySelector('.purchase-quantity').addEventListener('input', recalc);
+    row.querySelector('.purchase-unit-price').addEventListener('input', recalc);
+    row.querySelector('.purchase-remove-btn').addEventListener('click', (e) => {
+        e.preventDefault();
+        removePurchaseItemRow(row);
+    });
+
+    return row;
+}
+
+function removePurchaseItemRow(row) {
+    if (row.parentNode) row.parentNode.removeChild(row);
+    recalculatePurchaseTotals();
+}
+
+function recalculatePurchaseTotals() {
+    let grandTotal = 0;
+    elements.purchaseItemsContainer.querySelectorAll('.purchase-item').forEach(row => {
+        const quantity = parseFloat(row.querySelector('.purchase-quantity').value) || 0;
+        const unitPrice = parseFloat(row.querySelector('.purchase-unit-price').value) || 0;
+        const itemTotal = quantity * unitPrice;
+        grandTotal += itemTotal;
+        row.querySelector('.purchase-item-total-value').textContent = formatCurrency(itemTotal);
+    });
+    elements.purchaseTotalAmount.textContent = formatCurrency(grandTotal);
+}
+
+function resetPurchaseSection() {
+    elements.purchaseItemsContainer.innerHTML = '';
+    elements.purchaseDateInput.value = new Date().toISOString().slice(0, 10);
+    addPurchaseItemRow();
+    recalculatePurchaseTotals();
+}
+
+function collectPurchaseItems() {
+    const items = [];
+    let valid = true;
+    elements.purchaseItemsContainer.querySelectorAll('.purchase-item').forEach(row => {
+        const productName = row.querySelector('.purchase-product-name').value.trim();
+        const quantity = row.querySelector('.purchase-quantity').value;
+        const unitPrice = row.querySelector('.purchase-unit-price').value;
+        if (!productName || quantity === '' || unitPrice === '') {
+            valid = false;
+            return;
+        }
+        items.push({
+            product_name: productName,
+            quantity: parseFloat(quantity),
+            unit_purchase_price: parseFloat(unitPrice),
+        });
+    });
+    if (items.length === 0) valid = false;
+    return valid ? items : null;
+}
+
+async function handlePurchaseSubmit() {
+    const items = collectPurchaseItems();
+    if (!items) {
+        showToast(t('purchase_items_required'), 'error');
+        return;
+    }
+    if (!elements.purchaseDateInput.value) {
+        showToast(t('purchase_date_required'), 'error');
+        return;
+    }
+    const result = await createPurchase({
+        purchase_date: elements.purchaseDateInput.value,
+        items: items,
+    });
+    if (result) {
+        showToast(t('purchase_saved'), 'success', 4000);
+        closeTransactionModal();
     }
 }
 
@@ -761,7 +920,11 @@ async function deleteDebtRecord(debtId) {
 function openTransactionModal() {
     elements.transactionModal.classList.add('active');
     elements.transactionForm.reset();
-    elements.productNameInput.focus();
+    resetPurchaseSection();
+    updateTransactionFields();
+    if (elements.submitTransactionBtn && !elements.submitTransactionBtn.hidden) {
+        elements.productNameInput.focus();
+    }
 }
 
 function updateTransactionFields() {
@@ -769,13 +932,17 @@ function updateTransactionFields() {
     const isSale = type === 'SALE';
     const isDebt = type === 'DEBT';
     const isDebit = type === 'DEBIT';
+    const isPurchase = type === 'PURCHASE';
     const isCredit = type === 'CREDIT';
     const requiresCustomer = isCredit;
 
-    elements.customerFieldGroup.hidden = isSale || isDebt || isDebit;
+    elements.customerFieldGroup.hidden = isSale || isDebt || isDebit || isPurchase;
     elements.customerSelect.required = requiresCustomer;
+    elements.productFieldGroup.hidden = isPurchase;
     elements.productNameInput.required = isSale || isDebt;
     elements.productRequired.hidden = !(isSale || isDebt);
+    elements.amountFieldGroup.hidden = isPurchase;
+    elements.descriptionFieldGroup.hidden = isPurchase;
 
     elements.borrowerFieldGroup.hidden = !isDebt;
     elements.borrowerNameInput.required = isDebt;
@@ -784,6 +951,14 @@ function updateTransactionFields() {
     elements.payerFieldGroup.hidden = !isDebit;
     elements.payerNameInput.required = isDebit;
     elements.payerRequired.hidden = !isDebit;
+
+    elements.purchaseSection.hidden = !isPurchase;
+    elements.submitTransactionBtn.hidden = isPurchase;
+    elements.submitPurchaseBtn.hidden = !isPurchase;
+
+    if (elements.transactionModalTitle) {
+        elements.transactionModalTitle.textContent = isPurchase ? t('add_purchase') : t('add_transaction');
+    }
 
     if (isDebt) {
         elements.productNameInput.placeholder = t('enter_product_borrowed');
@@ -835,6 +1010,12 @@ updateHeaderDate();
 elements.fabButton.addEventListener('click', openTransactionModal);
 elements.logoutButton.addEventListener('click', logoutUser);
 elements.backupButton.addEventListener('click', startGoogleBackup);
+
+// Purchase: Add Another Product
+elements.addProductBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    addPurchaseItemRow();
+});
 
 // Settings
 elements.settingsButton.addEventListener('click', () => {
@@ -907,6 +1088,12 @@ elements.searchInput.addEventListener('input', (e) => {
 // Transaction Form Submit
 elements.transactionForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+
+    const selectedType = document.querySelector('input[name="type"]:checked')?.value;
+    if (selectedType === 'PURCHASE') {
+        await handlePurchaseSubmit();
+        return;
+    }
 
     const formData = new FormData(elements.transactionForm);
     const data = Object.fromEntries(formData);

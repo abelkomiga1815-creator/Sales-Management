@@ -103,6 +103,22 @@ const translations = {
         transaction_deleted: 'Transaction deleted',
         no_transactions: 'No transactions yet',
 
+        // Purchases
+        purchase: 'Purchase',
+        add_purchase: 'Add Purchase',
+        purchase_date: 'Purchase Date',
+        product_name: 'Product Name',
+        quantity: 'Quantity',
+        unit_purchase_price: 'Unit Purchase Price',
+        item_total: 'Item Total',
+        add_another_product: 'Add Another Product',
+        total_purchase_amount: 'Total Purchase Amount',
+        save_purchase: 'Save Purchase',
+        remove: 'Remove',
+        purchase_saved: 'Purchase recorded successfully!',
+        purchase_items_required: 'Please fill in the product name, quantity, and unit price for each item.',
+        purchase_date_required: 'Please choose a purchase date.',
+
         // Debts
         recorded_debts: 'Recorded Debts',
         no_debts: 'No debts recorded',
@@ -267,6 +283,22 @@ const translations = {
         delete_confirm: 'Futa muamala huu? Haitaweza kutenduliwa.',
         transaction_deleted: 'Muamala umefutwa',
         no_transactions: 'Hakuna miamala bado',
+
+        // Purchases
+        purchase: 'Manunuzi',
+        add_purchase: 'Ongeza Manunuzi',
+        purchase_date: 'Tarehe ya Manunuzi',
+        product_name: 'Jina la Bidhaa',
+        quantity: 'Idadi',
+        unit_purchase_price: 'Bei ya Kununua kwa Kimoja',
+        item_total: 'Jumla ya Bidhaa',
+        add_another_product: 'Ongeza Bidhaa Nyingine',
+        total_purchase_amount: 'Jumla ya Gharama za Manunuzi',
+        save_purchase: 'Hifadhi Manunuzi',
+        remove: 'Ondoa',
+        purchase_saved: 'Manunuzi yamehifadhiwa kwa mafanikio!',
+        purchase_items_required: 'Tafadhali jaza jina la bidhaa, idadi, na bei kwa kila bidhaa.',
+        purchase_date_required: 'Tafadhali chagua tarehe ya manunuzi.',
 
         // Debts
         recorded_debts: 'Deni Zilizorekodiwa',

@@ -208,8 +208,8 @@ class PurchaseCreateSerializer(serializers.Serializer):
                 unit_price = float(item.get('unit_purchase_price', 0))
             except (TypeError, ValueError):
                 raise serializers.ValidationError(f'Item {i+1}: Invalid unit price.')
-            if unit_price <= 0:
-                raise serializers.ValidationError(f'Item {i+1}: Unit price must be positive.')
+            if unit_price < 0:
+                raise serializers.ValidationError(f'Item {i+1}: Unit price must be greater than or equal to zero.')
         return items
 
 
